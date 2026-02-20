@@ -2127,7 +2127,7 @@ export default function Component() {
           <span class="ai-chat-icon">✨</span>
           <div>
             <div class="ai-chat-title">AI Design Chat</div>
-            <div class="ai-chat-subtitle" id="aiStatusLabel">Claude에 연결 중...</div>
+            <div class="ai-chat-subtitle" id="aiStatusLabel">확인 중...</div>
           </div>
         </div>
         <button class="ai-settings-btn" id="aiSettingsBtn" title="API 키 설정">⚙️</button>
@@ -3557,30 +3557,31 @@ export default function Component() {
     var aiChatHistory = [];  // { role: 'user'|'assistant', content: string }
     var aiIsLoading = false;
 
-    // API 키 상태 확인
+    // API 키 상태 확인 (빠른 체크 - Claude API 호출 없음)
     function checkAIStatus() {
-      fetch('http://localhost:7777/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: 'ping' }] })
-      })
+      var label = document.getElementById('aiStatusLabel');
+      var keyStatus = document.getElementById('aiKeyStatus');
+      if (label) label.textContent = '확인 중...';
+
+      fetch('http://localhost:7777/ai/status')
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        var label = document.getElementById('aiStatusLabel');
-        var keyStatus = document.getElementById('aiKeyStatus');
-        if (data.error && data.error.indexOf('API 키') >= 0) {
-          if (label) label.textContent = '❌ API 키 미설정';
-          if (keyStatus) { keyStatus.textContent = '❌ ' + data.error; keyStatus.className = 'ai-key-status error'; }
-        } else {
+        if (data.hasKey) {
           if (label) label.textContent = '✅ Claude AI 연결됨';
           if (keyStatus) { keyStatus.textContent = '✅ API 키 설정됨'; keyStatus.className = 'ai-key-status ok'; }
+        } else {
+          if (label) label.textContent = '⚠️ API 키를 설정해주세요';
+          if (keyStatus) { keyStatus.textContent = '❌ .env 파일에 ANTHROPIC_API_KEY를 입력해주세요'; keyStatus.className = 'ai-key-status error'; }
         }
       })
       .catch(function() {
-        var label = document.getElementById('aiStatusLabel');
-        if (label) label.textContent = '❌ 서버 연결 실패 (서버 시작 필요)';
+        if (label) label.textContent = '❌ 서버 미실행 — 서버시작.command 더블클릭';
+        if (keyStatus) { keyStatus.textContent = '❌ 서버가 실행되지 않았습니다'; keyStatus.className = 'ai-key-status error'; }
       });
     }
+
+    // 플러그인 시작 시 즉시 상태 확인
+    checkAIStatus();
 
     // 설정 버튼 토글
     document.getElementById('aiSettingsBtn').onclick = function() {
