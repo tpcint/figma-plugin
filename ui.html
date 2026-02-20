@@ -895,7 +895,79 @@
       flex-shrink: 0;
     }
 
-    /* .pen 입력 탭 */
+    /* .pen 파일 선택 목록 */
+    .pen-file-picker {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .pen-file-pick-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1.5px solid #E2E2ED;
+      background: #fff;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      font-size: 13px;
+      color: #110F1A;
+      font-weight: 500;
+      text-align: left;
+      width: 100%;
+    }
+
+    .pen-file-pick-item:hover {
+      border-color: #413EF0;
+      background: #F5F5FF;
+    }
+
+    .pen-file-pick-item.selected {
+      border-color: #413EF0;
+      background: #EEEEFF;
+      color: #413EF0;
+      font-weight: 700;
+    }
+
+    .pen-file-pick-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .pen-file-pick-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pen-file-pick-empty {
+      text-align: center;
+      color: #9DA0B2;
+      font-size: 12px;
+      padding: 16px 0;
+    }
+
+    .pen-file-pick-refresh {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .pen-file-pick-refresh-btn {
+      background: none;
+      border: none;
+      color: #413EF0;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 2px 0;
+    }
+
     /* .pen 사용 방법 안내 */
     .pen-howto {
       display: flex;
@@ -1541,7 +1613,7 @@ export default function Component() {
       <div class="card" style="margin-top: 12px;">
         <h2 class="card-title">.pen → Figma Frame</h2>
 
-        <!-- 파일 경로 입력 -->
+        <!-- 파일 선택 UI -->
         <div id="penPathSection">
           <!-- 서버 실행 안내 (평소엔 숨김) -->
           <div id="penServerGuide" style="display:none;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px;">
@@ -1550,21 +1622,18 @@ export default function Component() {
             <div style="background:#1E1E1E;color:#4ADE80;padding:8px 10px;border-radius:6px;font-family:monospace;font-size:11px;word-break:break-all;">
               node "/Users/tpc/Desktop/figma mcp/pen-server.cjs"
             </div>
-            <div style="color:#92400E;margin-top:8px;font-size:11px;">실행 후 다시 불러오기 버튼을 누르세요</div>
+            <div style="color:#92400E;margin-top:8px;font-size:11px;">실행 후 새로고침을 눌러주세요</div>
           </div>
 
-          <div style="font-size:12px;color:#838499;margin-bottom:8px;">
-            .pen 파일 경로를 입력하고 불러오기를 누르세요
+          <!-- 파일 목록 헤더 -->
+          <div class="pen-file-pick-refresh">
+            <span style="font-size:12px;color:#838499;">바탕화면의 .pen 파일을 선택하세요</span>
+            <button class="pen-file-pick-refresh-btn" onclick="refreshPenFileList()" id="penRefreshBtn">↻ 새로고침</button>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input type="text" id="penPathInput" class="input-text"
-              placeholder="/Users/yourname/Desktop/디자인.pen"
-              value="/Users/tpc/Desktop/디자인test.pen"
-              style="flex:1;font-size:12px;">
-            <button class="btn btn-primary" id="penLoadBtn" onclick="loadPenFromPath()" style="white-space:nowrap;min-width:auto;padding:10px 14px;">
-              <span class="btn-text">불러오기</span>
-              <span class="btn-loading"><span class="btn-spinner"></span></span>
-            </button>
+
+          <!-- 파일 목록 -->
+          <div class="pen-file-picker" id="penFilePicker">
+            <div class="pen-file-pick-empty">불러오는 중...</div>
           </div>
         </div>
 
@@ -2625,17 +2694,64 @@ export default function Component() {
     // ===== .pen 변환 =====
     var penDocumentData = null;
     var penParsedFrames = [];
+    var penSelectedFilePath = null;
 
-    // 파일 경로로 .pen 읽기 → 로컬 서버(localhost:7777) 경유
-    function loadPenFromPath() {
-      var filePath = document.getElementById('penPathInput').value.trim();
-      if (!filePath) { showPenStatus('파일 경로를 입력하세요', 'error'); return; }
+    // 플러그인 열릴 때 파일 목록 자동 로드
+    (function() {
+      setTimeout(function() { refreshPenFileList(); }, 300);
+    })();
 
-      var btn = document.getElementById('penLoadBtn');
-      btn.classList.add('loading');
-      showPenStatus('서버에서 파일 읽는 중...', 'info');
+    // 바탕화면 .pen 파일 목록 새로고침
+    function refreshPenFileList() {
+      var picker = document.getElementById('penFilePicker');
+      var refreshBtn = document.getElementById('penRefreshBtn');
+      picker.innerHTML = '<div class="pen-file-pick-empty">불러오는 중...</div>';
+      if (refreshBtn) refreshBtn.textContent = '↻ 로딩 중...';
 
-      // 로컬 서버를 통해 파일 읽기 (CORS 허용됨)
+      fetch('http://localhost:7777/pen')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (refreshBtn) refreshBtn.textContent = '↻ 새로고침';
+          document.getElementById('penServerGuide').style.display = 'none';
+
+          var files = data.files || [];
+          if (files.length === 0) {
+            picker.innerHTML = '<div class="pen-file-pick-empty">바탕화면에 .pen 파일이 없습니다</div>';
+            return;
+          }
+
+          picker.innerHTML = '';
+          files.forEach(function(filePath) {
+            var fileName = filePath.split('/').pop().replace('.pen', '');
+            var btn = document.createElement('button');
+            btn.className = 'pen-file-pick-item' + (filePath === penSelectedFilePath ? ' selected' : '');
+            btn.innerHTML =
+              '<span class="pen-file-pick-icon">🖊️</span>' +
+              '<span class="pen-file-pick-name">' + fileName + '</span>' +
+              '<span style="font-size:11px;color:#9DA0B2;flex-shrink:0;">.pen</span>';
+            btn.onclick = function() { selectAndLoadPenFile(filePath); };
+            picker.appendChild(btn);
+          });
+        })
+        .catch(function(err) {
+          if (refreshBtn) refreshBtn.textContent = '↻ 새로고침';
+          picker.innerHTML = '<div class="pen-file-pick-empty">서버 연결 실패</div>';
+          document.getElementById('penServerGuide').style.display = 'block';
+        });
+    }
+
+    // 파일 클릭 → 선택 + 로드
+    function selectAndLoadPenFile(filePath) {
+      penSelectedFilePath = filePath;
+
+      // 선택 강조
+      var items = document.querySelectorAll('.pen-file-pick-item');
+      items.forEach(function(el) { el.classList.remove('selected'); });
+      event.currentTarget.classList.add('selected');
+
+      showPenStatus('파일 읽는 중...', 'info');
+      clearPenFile(true); // 이전 결과만 초기화 (목록은 유지)
+
       var serverUrl = 'http://localhost:7777/pen?path=' + encodeURIComponent(filePath);
       fetch(serverUrl)
         .then(function(res) {
@@ -2643,19 +2759,10 @@ export default function Component() {
           return res.text();
         })
         .then(function(text) {
-          btn.classList.remove('loading');
           parsePenText(text);
         })
         .catch(function(err) {
-          btn.classList.remove('loading');
-          // 서버 미실행 → 터미널 명령 안내
-          var isConnRefused = err.message.indexOf('fetch') > -1 || err.message.indexOf('Failed') > -1;
-          if (isConnRefused) {
-            showPenStatus('⚠️ 서버가 실행되지 않았습니다. 아래 안내를 따라주세요.', 'error');
-            document.getElementById('penServerGuide').style.display = 'block';
-          } else {
-            showPenStatus('오류: ' + err.message, 'error');
-          }
+          showPenStatus('오류: ' + err.message, 'error');
         });
     }
 
@@ -2686,7 +2793,8 @@ export default function Component() {
     }
 
     function displayPenFrames(frames, variables) {
-      document.getElementById('penFileName').textContent = frames.length + '개 프레임 감지됨';
+      var fName = penSelectedFilePath ? penSelectedFilePath.split('/').pop().replace('.pen','') : '파일';
+      document.getElementById('penFileName').textContent = fName + ' — ' + frames.length + '개 프레임';
       document.getElementById('penFileMeta').textContent = Object.keys(variables).length + '개 컬러 변수 포함';
       document.getElementById('penFileInfo').classList.add('show');
       document.getElementById('penConvertStatus').className = 'status';
@@ -2714,7 +2822,7 @@ export default function Component() {
       }
     }
 
-    function clearPenFile() {
+    function clearPenFile(keepList) {
       penDocumentData = null;
       penParsedFrames = [];
       document.getElementById('penFileInfo').classList.remove('show');
