@@ -1438,53 +1438,138 @@
 
     .ai-settings-btn:hover { opacity: 1; }
 
-    .ai-settings-panel {
-      background: #fff;
-      border-bottom: 1px solid #E8E9F2;
-      padding: 14px 20px;
-      flex-shrink: 0;
+    /* AI 설정 모달 */
+    .ai-modal-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(17,15,26,0.45);
+      z-index: 200;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 60px;
     }
 
-    .ai-settings-inner { display: flex; flex-direction: column; gap: 6px; }
+    .ai-modal {
+      background: #fff;
+      border-radius: 16px;
+      width: calc(100% - 32px);
+      max-width: 340px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      overflow: hidden;
+    }
 
-    .ai-settings-label {
-      font-size: 13px;
-      font-weight: 600;
+    .ai-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid #F0F1F7;
+    }
+
+    .ai-modal-title {
+      font-size: 14px;
+      font-weight: 700;
       color: #110F1A;
     }
 
-    .ai-settings-desc {
-      font-size: 11px;
+    .ai-modal-close {
+      background: none;
+      border: none;
+      font-size: 14px;
       color: #9DA0B2;
-      line-height: 1.5;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 6px;
     }
 
-    .ai-settings-desc code {
-      background: #F3F4F5;
-      padding: 1px 4px;
-      border-radius: 4px;
-      font-family: monospace;
-      font-size: 10px;
+    .ai-modal-close:hover { background: #F3F4F5; color: #110F1A; }
+
+    .ai-modal-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
-    .ai-key-status {
+    .ai-modal-status {
       font-size: 12px;
       font-weight: 600;
-      padding: 6px 10px;
+      padding: 7px 12px;
       border-radius: 8px;
       background: #F3F4F5;
       color: #9DA0B2;
     }
 
-    .ai-key-status.ok {
+    .ai-modal-status.ok {
       background: #ECFDF5;
       color: #059669;
     }
 
-    .ai-key-status.error {
+    .ai-modal-status.error {
       background: #FEF2F2;
       color: #DC2626;
     }
+
+    .ai-modal-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #110F1A;
+    }
+
+    .ai-key-input {
+      width: 100%;
+      border: 1px solid #D7D8E5;
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 12px;
+      font-family: monospace;
+      outline: none;
+      color: #110F1A;
+      background: #F8F9FB;
+      transition: border-color 0.15s;
+    }
+
+    .ai-key-input:focus { border-color: #110F1A; background: #fff; }
+
+    .ai-key-save-btn {
+      width: 100%;
+      background: #110F1A;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .ai-key-save-btn:hover { background: #2D2A3D; }
+    .ai-key-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .ai-modal-divider {
+      height: 1px;
+      background: #F0F1F7;
+    }
+
+    .ai-modal-desc {
+      font-size: 11px;
+      color: #9DA0B2;
+      line-height: 1.6;
+    }
+
+    .ai-modal-desc a { color: #6366F1; }
+    .ai-modal-desc b { color: #110F1A; }
+    .ai-modal-desc code {
+      background: #F3F4F5;
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+
+    /* ai-chat-wrap은 position:relative 필요 (모달 위치 기준) */
+    .ai-chat-wrap { position: relative; }
 
     .ai-messages {
       flex: 1;
@@ -2133,12 +2218,26 @@ export default function Component() {
         <button class="ai-settings-btn" id="aiSettingsBtn" title="API 키 설정">⚙️</button>
       </div>
 
-      <!-- API 키 설정 패널 -->
-      <div class="ai-settings-panel" id="aiSettingsPanel" style="display:none;">
-        <div class="ai-settings-inner">
-          <div class="ai-settings-label">🔑 Claude API Key</div>
-          <div class="ai-settings-desc">.env 파일에서 자동으로 읽어옵니다.<br>키 변경은 <code>.env</code> 파일을 직접 수정 후 서버 재시작.</div>
-          <div class="ai-key-status" id="aiKeyStatus">확인 중...</div>
+      <!-- API 키 설정 모달 오버레이 -->
+      <div class="ai-modal-overlay" id="aiModalOverlay" style="display:none;">
+        <div class="ai-modal">
+          <div class="ai-modal-header">
+            <span class="ai-modal-title">⚙️ API 키 설정</span>
+            <button class="ai-modal-close" id="aiModalClose">✕</button>
+          </div>
+          <div class="ai-modal-body">
+            <div class="ai-modal-status" id="aiKeyStatus">확인 중...</div>
+            <div class="ai-modal-label">🔑 Claude API Key 입력</div>
+            <input class="ai-key-input" id="aiKeyInput" type="password" placeholder="sk-ant-api03-..." />
+            <button class="ai-key-save-btn" id="aiKeySaveBtn">저장 (서버에 적용)</button>
+            <div class="ai-modal-divider"></div>
+            <div class="ai-modal-desc">
+              <b>사용 방법:</b><br>
+              1. <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> 에서 API 키 발급<br>
+              2. 위 입력창에 붙여넣고 <b>저장</b> 클릭<br>
+              3. 또는 <code>.env</code> 파일에 직접 입력 후 서버 재시작
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3568,26 +3667,81 @@ export default function Component() {
       .then(function(data) {
         if (data.hasKey) {
           if (label) label.textContent = '✅ Claude AI 연결됨';
-          if (keyStatus) { keyStatus.textContent = '✅ API 키 설정됨'; keyStatus.className = 'ai-key-status ok'; }
+          if (keyStatus) { keyStatus.textContent = '✅ API 키 설정됨'; keyStatus.className = 'ai-modal-status ok'; }
         } else {
-          if (label) label.textContent = '⚠️ API 키를 설정해주세요';
-          if (keyStatus) { keyStatus.textContent = '❌ .env 파일에 ANTHROPIC_API_KEY를 입력해주세요'; keyStatus.className = 'ai-key-status error'; }
+          if (label) label.textContent = '⚙️ 설정 버튼을 눌러 API 키를 입력해주세요';
+          if (keyStatus) { keyStatus.textContent = '❌ API 키가 설정되지 않았습니다'; keyStatus.className = 'ai-modal-status error'; }
         }
       })
       .catch(function() {
         if (label) label.textContent = '❌ 서버 미실행 — 서버시작.command 더블클릭';
-        if (keyStatus) { keyStatus.textContent = '❌ 서버가 실행되지 않았습니다'; keyStatus.className = 'ai-key-status error'; }
+        if (keyStatus) { keyStatus.textContent = '❌ 서버가 실행되지 않았습니다'; keyStatus.className = 'ai-modal-status error'; }
       });
     }
 
     // 플러그인 시작 시 즉시 상태 확인
     checkAIStatus();
 
-    // 설정 버튼 토글
-    document.getElementById('aiSettingsBtn').onclick = function() {
-      var panel = document.getElementById('aiSettingsPanel');
-      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-      if (panel.style.display === 'block') checkAIStatus();
+    // 설정 모달 열기/닫기
+    function openAIModal() {
+      var overlay = document.getElementById('aiModalOverlay');
+      overlay.style.display = 'flex';
+      checkAIStatus();
+    }
+
+    function closeAIModal() {
+      document.getElementById('aiModalOverlay').style.display = 'none';
+    }
+
+    document.getElementById('aiSettingsBtn').onclick = openAIModal;
+    document.getElementById('aiModalClose').onclick = closeAIModal;
+
+    // 오버레이 바깥 클릭 시 닫기
+    document.getElementById('aiModalOverlay').onclick = function(e) {
+      if (e.target === this) closeAIModal();
+    };
+
+    // API 키 저장 버튼
+    document.getElementById('aiKeySaveBtn').onclick = function() {
+      var key = document.getElementById('aiKeyInput').value.trim();
+      if (!key || !key.startsWith('sk-')) {
+        var status = document.getElementById('aiKeyStatus');
+        status.textContent = '❌ 올바른 API 키를 입력해주세요 (sk- 로 시작)';
+        status.className = 'ai-modal-status error';
+        return;
+      }
+
+      var btn = document.getElementById('aiKeySaveBtn');
+      btn.disabled = true;
+      btn.textContent = '저장 중...';
+
+      fetch('http://localhost:7777/ai/setkey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: key })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = '저장 (서버에 적용)';
+        var status = document.getElementById('aiKeyStatus');
+        if (data.ok) {
+          status.textContent = '✅ API 키가 저장되었습니다!';
+          status.className = 'ai-modal-status ok';
+          document.getElementById('aiStatusLabel').textContent = '✅ Claude AI 연결됨';
+          document.getElementById('aiKeyInput').value = '';
+        } else {
+          status.textContent = '❌ 저장 실패: ' + (data.error || '알 수 없는 오류');
+          status.className = 'ai-modal-status error';
+        }
+      })
+      .catch(function() {
+        btn.disabled = false;
+        btn.textContent = '저장 (서버에 적용)';
+        var status = document.getElementById('aiKeyStatus');
+        status.textContent = '❌ 서버 연결 실패 — 서버를 먼저 실행해주세요';
+        status.className = 'ai-modal-status error';
+      });
     };
 
     // 메시지 스크롤 최하단
