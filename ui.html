@@ -1440,10 +1440,10 @@
 
     /* AI 설정 모달 */
     .ai-modal-overlay {
-      position: absolute;
-      inset: 0;
-      background: rgba(17,15,26,0.45);
-      z-index: 200;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(17,15,26,0.5);
+      z-index: 9999;
       display: flex;
       align-items: flex-start;
       justify-content: center;
@@ -2216,29 +2216,6 @@ export default function Component() {
           </div>
         </div>
         <button class="ai-settings-btn" id="aiSettingsBtn" title="API 키 설정">⚙️</button>
-      </div>
-
-      <!-- API 키 설정 모달 오버레이 -->
-      <div class="ai-modal-overlay" id="aiModalOverlay" style="display:none;">
-        <div class="ai-modal">
-          <div class="ai-modal-header">
-            <span class="ai-modal-title">⚙️ API 키 설정</span>
-            <button class="ai-modal-close" id="aiModalClose">✕</button>
-          </div>
-          <div class="ai-modal-body">
-            <div class="ai-modal-status" id="aiKeyStatus">확인 중...</div>
-            <div class="ai-modal-label">🔑 Claude API Key 입력</div>
-            <input class="ai-key-input" id="aiKeyInput" type="password" placeholder="sk-ant-api03-..." />
-            <button class="ai-key-save-btn" id="aiKeySaveBtn">저장 (서버에 적용)</button>
-            <div class="ai-modal-divider"></div>
-            <div class="ai-modal-desc">
-              <b>사용 방법:</b><br>
-              1. <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> 에서 API 키 발급<br>
-              2. 위 입력창에 붙여넣고 <b>저장</b> 클릭<br>
-              3. 또는 <code>.env</code> 파일에 직접 입력 후 서버 재시작
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- 채팅 메시지 목록 -->
@@ -3682,66 +3659,10 @@ export default function Component() {
     // 플러그인 시작 시 즉시 상태 확인
     checkAIStatus();
 
-    // 설정 모달 열기/닫기
-    function openAIModal() {
-      var overlay = document.getElementById('aiModalOverlay');
-      overlay.style.display = 'flex';
+    // 설정 버튼 → 모달 열기
+    document.getElementById('aiSettingsBtn').onclick = function() {
+      document.getElementById('aiModalOverlay').style.display = 'flex';
       checkAIStatus();
-    }
-
-    function closeAIModal() {
-      document.getElementById('aiModalOverlay').style.display = 'none';
-    }
-
-    document.getElementById('aiSettingsBtn').onclick = openAIModal;
-    document.getElementById('aiModalClose').onclick = closeAIModal;
-
-    // 오버레이 바깥 클릭 시 닫기
-    document.getElementById('aiModalOverlay').onclick = function(e) {
-      if (e.target === this) closeAIModal();
-    };
-
-    // API 키 저장 버튼
-    document.getElementById('aiKeySaveBtn').onclick = function() {
-      var key = document.getElementById('aiKeyInput').value.trim();
-      if (!key || !key.startsWith('sk-')) {
-        var status = document.getElementById('aiKeyStatus');
-        status.textContent = '❌ 올바른 API 키를 입력해주세요 (sk- 로 시작)';
-        status.className = 'ai-modal-status error';
-        return;
-      }
-
-      var btn = document.getElementById('aiKeySaveBtn');
-      btn.disabled = true;
-      btn.textContent = '저장 중...';
-
-      fetch('http://localhost:7777/ai/setkey', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: key })
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        btn.disabled = false;
-        btn.textContent = '저장 (서버에 적용)';
-        var status = document.getElementById('aiKeyStatus');
-        if (data.ok) {
-          status.textContent = '✅ API 키가 저장되었습니다!';
-          status.className = 'ai-modal-status ok';
-          document.getElementById('aiStatusLabel').textContent = '✅ Claude AI 연결됨';
-          document.getElementById('aiKeyInput').value = '';
-        } else {
-          status.textContent = '❌ 저장 실패: ' + (data.error || '알 수 없는 오류');
-          status.className = 'ai-modal-status error';
-        }
-      })
-      .catch(function() {
-        btn.disabled = false;
-        btn.textContent = '저장 (서버에 적용)';
-        var status = document.getElementById('aiKeyStatus');
-        status.textContent = '❌ 서버 연결 실패 — 서버를 먼저 실행해주세요';
-        status.className = 'ai-modal-status error';
-      });
     };
 
     // 메시지 스크롤 최하단
@@ -3931,6 +3852,76 @@ export default function Component() {
       });
     });
 
+  </script>
+
+  <!-- AI 설정 모달 — body 최상위에 배치 (overflow/z-index 문제 방지) -->
+  <div class="ai-modal-overlay" id="aiModalOverlay" style="display:none;">
+    <div class="ai-modal">
+      <div class="ai-modal-header">
+        <span class="ai-modal-title">⚙️ API 키 설정</span>
+        <button class="ai-modal-close" id="aiModalClose">✕</button>
+      </div>
+      <div class="ai-modal-body">
+        <div class="ai-modal-status" id="aiKeyStatus">확인 중...</div>
+        <div class="ai-modal-label">🔑 Claude API Key 입력</div>
+        <input class="ai-key-input" id="aiKeyInput" type="password" placeholder="sk-ant-api03-..." />
+        <button class="ai-key-save-btn" id="aiKeySaveBtn">저장 (서버에 적용)</button>
+        <div class="ai-modal-divider"></div>
+        <div class="ai-modal-desc">
+          <b>사용 방법:</b><br>
+          1. <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> 에서 API 키 발급<br>
+          2. 위 입력창에 붙여넣고 <b>저장</b> 클릭<br>
+          3. 또는 <code>.env</code> 파일에 직접 입력 후 서버 재시작
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== AI 설정 모달 이벤트 바인딩 =====
+    document.getElementById('aiModalClose').onclick = function() {
+      document.getElementById('aiModalOverlay').style.display = 'none';
+    };
+    document.getElementById('aiModalOverlay').onclick = function(e) {
+      if (e.target === this) this.style.display = 'none';
+    };
+    document.getElementById('aiKeySaveBtn').onclick = function() {
+      var key = document.getElementById('aiKeyInput').value.trim();
+      var statusEl = document.getElementById('aiKeyStatus');
+      if (!key || !key.startsWith('sk-')) {
+        statusEl.textContent = '❌ 올바른 API 키를 입력해주세요 (sk- 로 시작)';
+        statusEl.className = 'ai-modal-status error';
+        return;
+      }
+      var btn = this;
+      btn.disabled = true;
+      btn.textContent = '저장 중...';
+      fetch('http://localhost:7777/ai/setkey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: key })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = '저장 (서버에 적용)';
+        if (data.ok) {
+          statusEl.textContent = '✅ API 키가 저장되었습니다!';
+          statusEl.className = 'ai-modal-status ok';
+          document.getElementById('aiStatusLabel').textContent = '✅ Claude AI 연결됨';
+          document.getElementById('aiKeyInput').value = '';
+        } else {
+          statusEl.textContent = '❌ 저장 실패: ' + (data.error || '알 수 없는 오류');
+          statusEl.className = 'ai-modal-status error';
+        }
+      })
+      .catch(function() {
+        btn.disabled = false;
+        btn.textContent = '저장 (서버에 적용)';
+        statusEl.textContent = '❌ 서버 연결 실패 — 서버를 먼저 실행해주세요';
+        statusEl.className = 'ai-modal-status error';
+      });
+    };
   </script>
 </body>
 </html>
