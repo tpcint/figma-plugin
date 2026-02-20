@@ -896,30 +896,6 @@
     }
 
     /* .pen 입력 탭 */
-    .pen-input-tabs {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 14px;
-    }
-
-    .pen-input-tab {
-      flex: 1;
-      padding: 8px;
-      border-radius: 8px;
-      border: 1px solid #D7D8E5;
-      background: #fff;
-      font-size: 12px;
-      font-weight: 600;
-      color: #5A5A73;
-      cursor: pointer;
-    }
-
-    .pen-input-tab.active {
-      background: #110F1A;
-      border-color: #110F1A;
-      color: #fff;
-    }
-
     /* .pen 사용 방법 안내 */
     .pen-howto {
       display: flex;
@@ -959,39 +935,6 @@
       padding: 1px 6px;
       font-size: 12px;
       font-family: -apple-system, sans-serif;
-      font-weight: 600;
-    }
-
-    /* .pen 붙여넣기 영역 */
-    .pen-paste-area {
-      width: 100%;
-      height: 72px;
-      border: 2px dashed #D7D8E5;
-      border-radius: 12px;
-      padding: 14px 16px;
-      font-size: 13px;
-      color: #838499;
-      background: #FAFAFA;
-      resize: none;
-      cursor: pointer;
-      outline: none;
-      transition: border-color 0.2s, background 0.2s;
-      margin-bottom: 12px;
-      font-family: -apple-system, sans-serif;
-      text-align: center;
-      line-height: 1.6;
-    }
-
-    .pen-paste-area:focus {
-      border-color: #110F1A;
-      background: #F0F0F5;
-      color: #110F1A;
-    }
-
-    .pen-paste-area.has-data {
-      border-color: #22C55E;
-      background: #F0FDF4;
-      color: #15803D;
       font-weight: 600;
     }
 
@@ -1598,12 +1541,6 @@ export default function Component() {
       <div class="card" style="margin-top: 12px;">
         <h2 class="card-title">.pen → Figma Frame</h2>
 
-        <!-- 탭: 파일경로 / JSON 직접입력 -->
-        <div class="pen-input-tabs">
-          <button class="pen-input-tab active" id="penTabPath" onclick="switchPenTab('path')">📁 파일 경로</button>
-          <button class="pen-input-tab" id="penTabJson" onclick="switchPenTab('json')">📋 JSON 붙여넣기</button>
-        </div>
-
         <!-- 파일 경로 입력 -->
         <div id="penPathSection">
           <!-- 서버 실행 안내 (평소엔 숨김) -->
@@ -1629,17 +1566,6 @@ export default function Component() {
               <span class="btn-loading"><span class="btn-spinner"></span></span>
             </button>
           </div>
-        </div>
-
-        <!-- JSON 직접 붙여넣기 -->
-        <div id="penJsonSection" style="display:none;">
-          <div style="font-size:12px;color:#838499;margin-bottom:8px;">
-            터미널에서 복사한 .pen JSON을 붙여넣으세요
-          </div>
-          <textarea id="penPasteArea" class="pen-paste-area" style="height:100px;"
-            placeholder='{"children":[...],"variables":{...}}'
-          ></textarea>
-          <button class="btn btn-secondary" onclick="parsePenJson()" style="margin-top:8px;width:100%;">JSON 파싱</button>
         </div>
 
         <!-- 파싱된 프레임 정보 -->
@@ -2700,14 +2626,6 @@ export default function Component() {
     var penDocumentData = null;
     var penParsedFrames = [];
 
-    function switchPenTab(tab) {
-      var isPath = tab === 'path';
-      document.getElementById('penTabPath').className = 'pen-input-tab' + (isPath ? ' active' : '');
-      document.getElementById('penTabJson').className = 'pen-input-tab' + (!isPath ? ' active' : '');
-      document.getElementById('penPathSection').style.display = isPath ? 'block' : 'none';
-      document.getElementById('penJsonSection').style.display = !isPath ? 'block' : 'none';
-    }
-
     // 파일 경로로 .pen 읽기 → 로컬 서버(localhost:7777) 경유
     function loadPenFromPath() {
       var filePath = document.getElementById('penPathInput').value.trim();
@@ -2739,13 +2657,6 @@ export default function Component() {
             showPenStatus('오류: ' + err.message, 'error');
           }
         });
-    }
-
-    // JSON textarea에서 직접 파싱
-    function parsePenJson() {
-      var text = document.getElementById('penPasteArea').value.trim();
-      if (!text) { showPenStatus('JSON을 먼저 붙여넣으세요', 'error'); return; }
-      parsePenText(text);
     }
 
     // 공통 파싱
@@ -2806,8 +2717,6 @@ export default function Component() {
     function clearPenFile() {
       penDocumentData = null;
       penParsedFrames = [];
-      var pa = document.getElementById('penPasteArea');
-      if (pa) pa.value = '';
       document.getElementById('penFileInfo').classList.remove('show');
       document.getElementById('penFrameList').classList.remove('show');
       document.getElementById('convertPenBtn').style.display = 'none';
