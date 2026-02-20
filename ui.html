@@ -1385,6 +1385,287 @@
       border-color: #110F1A;
     }
 
+    /* ===== AI Chat 탭 스타일 ===== */
+    .ai-chat-wrap {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 44px);
+      background: #F3F4F5;
+    }
+
+    .ai-chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: #fff;
+      border-bottom: 1px solid #E8E9F2;
+      flex-shrink: 0;
+    }
+
+    .ai-chat-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ai-chat-icon {
+      font-size: 22px;
+    }
+
+    .ai-chat-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #110F1A;
+    }
+
+    .ai-chat-subtitle {
+      font-size: 11px;
+      color: #9DA0B2;
+      margin-top: 1px;
+    }
+
+    .ai-settings-btn {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      opacity: 0.6;
+      transition: opacity 0.15s;
+    }
+
+    .ai-settings-btn:hover { opacity: 1; }
+
+    .ai-settings-panel {
+      background: #fff;
+      border-bottom: 1px solid #E8E9F2;
+      padding: 14px 20px;
+      flex-shrink: 0;
+    }
+
+    .ai-settings-inner { display: flex; flex-direction: column; gap: 6px; }
+
+    .ai-settings-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #110F1A;
+    }
+
+    .ai-settings-desc {
+      font-size: 11px;
+      color: #9DA0B2;
+      line-height: 1.5;
+    }
+
+    .ai-settings-desc code {
+      background: #F3F4F5;
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 10px;
+    }
+
+    .ai-key-status {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: #F3F4F5;
+      color: #9DA0B2;
+    }
+
+    .ai-key-status.ok {
+      background: #ECFDF5;
+      color: #059669;
+    }
+
+    .ai-key-status.error {
+      background: #FEF2F2;
+      color: #DC2626;
+    }
+
+    .ai-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .ai-message {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ai-message-user {
+      align-items: flex-end;
+    }
+
+    .ai-message-assistant {
+      align-items: flex-start;
+    }
+
+    .ai-message-bubble {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .ai-message-user .ai-message-bubble {
+      background: #110F1A;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .ai-message-assistant .ai-message-bubble {
+      background: #fff;
+      color: #110F1A;
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    .ai-message-assistant .ai-message-bubble em {
+      font-style: normal;
+      font-weight: 600;
+      color: #6366F1;
+    }
+
+    .ai-message-actions {
+      margin-top: 6px;
+      display: flex;
+      gap: 6px;
+    }
+
+    .ai-apply-btn {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: none;
+      cursor: pointer;
+      background: #6366F1;
+      color: #fff;
+      transition: background 0.15s;
+    }
+
+    .ai-apply-btn:hover { background: #4F46E5; }
+
+    .ai-apply-btn.applied {
+      background: #059669;
+      cursor: default;
+    }
+
+    .ai-apply-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .ai-thinking {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 14px;
+      background: #fff;
+      border-radius: 16px;
+      border-bottom-left-radius: 4px;
+      font-size: 12px;
+      color: #9DA0B2;
+      max-width: 85%;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    .ai-dots {
+      display: flex;
+      gap: 3px;
+    }
+
+    .ai-dots span {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #9DA0B2;
+      animation: aiDotBounce 1.2s infinite ease-in-out;
+    }
+
+    .ai-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .ai-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes aiDotBounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40% { transform: translateY(-5px); opacity: 1; }
+    }
+
+    .ai-input-wrap {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #fff;
+      border-top: 1px solid #E8E9F2;
+      flex-shrink: 0;
+    }
+
+    .ai-input {
+      flex: 1;
+      border: 1px solid #D7D8E5;
+      border-radius: 12px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      background: #F8F9FB;
+      color: #110F1A;
+      line-height: 1.45;
+      max-height: 120px;
+      overflow-y: auto;
+      transition: border-color 0.15s;
+    }
+
+    .ai-input:focus {
+      border-color: #110F1A;
+      background: #fff;
+    }
+
+    .ai-send-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #110F1A;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .ai-send-btn:hover { background: #2D2A3D; }
+    .ai-send-btn:active { transform: scale(0.94); }
+    .ai-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .ai-send-btn svg {
+      width: 15px;
+      height: 15px;
+      color: #fff;
+      margin-left: 1px;
+    }
+
+    .ai-error-bubble {
+      background: #FEF2F2;
+      color: #DC2626;
+      font-size: 12px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      max-width: 85%;
+    }
+
   </style>
 </head>
 <body>
@@ -1400,6 +1681,7 @@
       <button class="tab" data-tab="code2design">Code2Design</button>
       <button class="tab" data-tab="variables">Variables</button>
       <button class="tab" data-tab="style">Checker</button>
+      <button class="tab" data-tab="ai">✨ AI Chat</button>
     </div>
   </div>
 
@@ -1833,6 +2115,55 @@ export default function Component() {
       </div>
 
       <div class="status" id="checkerStatus"></div>
+    </div>
+  </div>
+
+  <!-- AI Chat 탭 -->
+  <div class="tab-content" id="ai-tab">
+    <div class="ai-chat-wrap">
+      <!-- 헤더 -->
+      <div class="ai-chat-header">
+        <div class="ai-chat-header-left">
+          <span class="ai-chat-icon">✨</span>
+          <div>
+            <div class="ai-chat-title">AI Design Chat</div>
+            <div class="ai-chat-subtitle" id="aiStatusLabel">Claude에 연결 중...</div>
+          </div>
+        </div>
+        <button class="ai-settings-btn" id="aiSettingsBtn" title="API 키 설정">⚙️</button>
+      </div>
+
+      <!-- API 키 설정 패널 -->
+      <div class="ai-settings-panel" id="aiSettingsPanel" style="display:none;">
+        <div class="ai-settings-inner">
+          <div class="ai-settings-label">🔑 Claude API Key</div>
+          <div class="ai-settings-desc">.env 파일에서 자동으로 읽어옵니다.<br>키 변경은 <code>.env</code> 파일을 직접 수정 후 서버 재시작.</div>
+          <div class="ai-key-status" id="aiKeyStatus">확인 중...</div>
+        </div>
+      </div>
+
+      <!-- 채팅 메시지 목록 -->
+      <div class="ai-messages" id="aiMessages">
+        <div class="ai-message ai-message-assistant">
+          <div class="ai-message-bubble">
+            안녕하세요! AI 디자인 어시스턴트입니다 🎨<br><br>
+            무엇을 만들어 드릴까요? 예시:<br>
+            • <em>"로그인 화면 만들어줘"</em><br>
+            • <em>"버튼 색을 파란색으로 바꿔줘"</em><br>
+            • <em>"카드 컴포넌트 3개 나란히 배치해줘"</em>
+          </div>
+        </div>
+      </div>
+
+      <!-- 입력 영역 -->
+      <div class="ai-input-wrap">
+        <textarea class="ai-input" id="aiInput" placeholder="원하는 디자인을 입력하세요..." rows="2"></textarea>
+        <button class="ai-send-btn" id="aiSendBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -3221,6 +3552,230 @@ export default function Component() {
     document.addEventListener('mouseup', () => {
       isResizing = false;
     });
+
+    // ===== AI Chat 기능 =====
+    var aiChatHistory = [];  // { role: 'user'|'assistant', content: string }
+    var aiIsLoading = false;
+
+    // API 키 상태 확인
+    function checkAIStatus() {
+      fetch('http://localhost:7777/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'ping' }] })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var label = document.getElementById('aiStatusLabel');
+        var keyStatus = document.getElementById('aiKeyStatus');
+        if (data.error && data.error.indexOf('API 키') >= 0) {
+          if (label) label.textContent = '❌ API 키 미설정';
+          if (keyStatus) { keyStatus.textContent = '❌ ' + data.error; keyStatus.className = 'ai-key-status error'; }
+        } else {
+          if (label) label.textContent = '✅ Claude AI 연결됨';
+          if (keyStatus) { keyStatus.textContent = '✅ API 키 설정됨'; keyStatus.className = 'ai-key-status ok'; }
+        }
+      })
+      .catch(function() {
+        var label = document.getElementById('aiStatusLabel');
+        if (label) label.textContent = '❌ 서버 연결 실패 (서버 시작 필요)';
+      });
+    }
+
+    // 설정 버튼 토글
+    document.getElementById('aiSettingsBtn').onclick = function() {
+      var panel = document.getElementById('aiSettingsPanel');
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      if (panel.style.display === 'block') checkAIStatus();
+    };
+
+    // 메시지 스크롤 최하단
+    function scrollAIToBottom() {
+      var el = document.getElementById('aiMessages');
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // 메시지 추가
+    function addAIMessage(role, content, commands) {
+      var messagesEl = document.getElementById('aiMessages');
+      var msgDiv = document.createElement('div');
+      msgDiv.className = 'ai-message ai-message-' + role;
+
+      var bubble = document.createElement('div');
+      bubble.className = 'ai-message-bubble';
+
+      if (role === 'assistant' && commands && commands.length > 0) {
+        // 명령 개수 표시
+        var summary = content || '';
+        if (!summary) {
+          summary = commands.length + '개 디자인 명령 생성됨';
+        }
+        bubble.innerHTML = summary.replace(/\n/g, '<br>');
+
+        var actions = document.createElement('div');
+        actions.className = 'ai-message-actions';
+
+        var applyBtn = document.createElement('button');
+        applyBtn.className = 'ai-apply-btn';
+        applyBtn.textContent = '▶ Figma에 적용';
+        applyBtn.onclick = function() {
+          applyBtn.disabled = true;
+          applyBtn.textContent = '적용 중...';
+          parent.postMessage({
+            pluginMessage: { type: 'ai-generate', commands: commands }
+          }, '*');
+          // 결과는 message 이벤트로 수신
+          var handler = function(event) {
+            var msg = event.data.pluginMessage;
+            if (!msg || msg.type !== 'ai-generate-result') return;
+            window.removeEventListener('message', handler);
+            if (msg.success) {
+              applyBtn.textContent = '✅ 적용 완료';
+              applyBtn.className = 'ai-apply-btn applied';
+            } else {
+              applyBtn.disabled = false;
+              applyBtn.textContent = '❌ 다시 시도';
+            }
+          };
+          window.addEventListener('message', handler);
+        };
+        actions.appendChild(applyBtn);
+        msgDiv.appendChild(bubble);
+        msgDiv.appendChild(actions);
+      } else if (role === 'assistant' && content && content.indexOf('error:') === 0) {
+        bubble.className = 'ai-error-bubble';
+        bubble.textContent = content.replace('error:', '').trim();
+        msgDiv.appendChild(bubble);
+      } else {
+        bubble.innerHTML = (content || '').replace(/\n/g, '<br>');
+        msgDiv.appendChild(bubble);
+      }
+
+      messagesEl.appendChild(msgDiv);
+      scrollAIToBottom();
+    }
+
+    // 로딩 표시
+    function showAIThinking() {
+      var messagesEl = document.getElementById('aiMessages');
+      var div = document.createElement('div');
+      div.className = 'ai-message ai-message-assistant';
+      div.id = 'aiThinkingMsg';
+      div.innerHTML = '<div class="ai-thinking"><div class="ai-dots"><span></span><span></span><span></span></div><span>생각 중...</span></div>';
+      messagesEl.appendChild(div);
+      scrollAIToBottom();
+    }
+
+    function removeAIThinking() {
+      var el = document.getElementById('aiThinkingMsg');
+      if (el) el.remove();
+    }
+
+    // Claude 응답에서 JSON 명령 파싱
+    function parseAICommands(text) {
+      // ```json ... ``` 블록 추출
+      var match = text.match(/```json\s*([\s\S]*?)```/);
+      if (!match) {
+        // 직접 JSON 배열 시도
+        match = text.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+        if (!match) return null;
+        try { return JSON.parse(match[0]); } catch(e) { return null; }
+      }
+      try { return JSON.parse(match[1].trim()); } catch(e) { return null; }
+    }
+
+    // AI에 메시지 전송
+    function sendAIMessage() {
+      if (aiIsLoading) return;
+      var input = document.getElementById('aiInput');
+      var text = input.value.trim();
+      if (!text) return;
+
+      // 사용자 메시지 표시
+      addAIMessage('user', text);
+      aiChatHistory.push({ role: 'user', content: text });
+      input.value = '';
+      input.style.height = 'auto';
+
+      // 로딩
+      aiIsLoading = true;
+      document.getElementById('aiSendBtn').disabled = true;
+      showAIThinking();
+
+      // 서버에 전송
+      fetch('http://localhost:7777/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: aiChatHistory })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        removeAIThinking();
+        aiIsLoading = false;
+        document.getElementById('aiSendBtn').disabled = false;
+
+        if (data.error) {
+          addAIMessage('assistant', 'error: ' + data.error);
+          return;
+        }
+
+        var responseText = data.text || '';
+        aiChatHistory.push({ role: 'assistant', content: responseText });
+
+        // JSON 명령 파싱 시도
+        var commands = parseAICommands(responseText);
+        if (commands && commands.length > 0) {
+          // 명령 수 요약
+          var summary = commands.length + '개 디자인 명령을 생성했습니다 ✨\n';
+          summary += commands.map(function(c) {
+            if (c.action === 'createFrame') return '• 프레임 생성: ' + (c.name || '');
+            if (c.action === 'createText') return '• 텍스트: ' + (c.content || c.name || '');
+            if (c.action === 'createRect') return '• 사각형: ' + (c.name || '');
+            if (c.action === 'createEllipse') return '• 원: ' + (c.name || '');
+            if (c.action === 'updateText') return '• 텍스트 변경: ' + (c.layerName || '');
+            if (c.action === 'updateFill') return '• 색상 변경: ' + (c.layerName || '');
+            return '• ' + c.action;
+          }).join('\n');
+          addAIMessage('assistant', summary, commands);
+        } else {
+          // 일반 텍스트 응답
+          addAIMessage('assistant', responseText);
+        }
+      })
+      .catch(function(err) {
+        removeAIThinking();
+        aiIsLoading = false;
+        document.getElementById('aiSendBtn').disabled = false;
+        addAIMessage('assistant', 'error: 서버 연결 실패. 서버가 실행 중인지 확인해주세요.');
+      });
+    }
+
+    // 전송 버튼
+    document.getElementById('aiSendBtn').onclick = sendAIMessage;
+
+    // Enter 키 전송 (Shift+Enter 줄바꿈)
+    document.getElementById('aiInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendAIMessage();
+      }
+    });
+
+    // textarea 자동 높이 조절
+    document.getElementById('aiInput').addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+
+    // AI 탭 활성화시 상태 확인
+    document.querySelectorAll('.tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        if (tab.dataset.tab === 'ai') {
+          setTimeout(checkAIStatus, 200);
+        }
+      });
+    });
+
   </script>
 </body>
 </html>

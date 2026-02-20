@@ -179,6 +179,11 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === 'convert-pen-frames') {
     await convertPenFrames(msg.frames, msg.variables);
   }
+
+  // AI 디자인 생성
+  if (msg.type === 'ai-generate') {
+    await executeAICommands(msg.commands);
+  }
 };
 
 // 선택된 레이어 정보 가져오기
@@ -3092,4 +3097,265 @@ function penFontWeightToStyle(weight) {
     heavy: 'Black'
   };
   return map[(weight + '').toLowerCase()] || 'Regular';
+}
+
+// ===== AI 디자인 명령 실행 =====
+
+// HEX 색상 → Figma RGB 변환
+function hexToRGB(hex) {
+  if (!hex || typeof hex !== 'string') return { r: 0, g: 0, b: 0 };
+  var h = hex.replace('#', '');
+  if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  return {
+    r: parseInt(h.slice(0,2), 16) / 255,
+    g: parseInt(h.slice(2,4), 16) / 255,
+    b: parseInt(h.slice(4,6), 16) / 255
+  };
+}
+
+// 이름으로 현재 페이지에서 노드 찾기
+function findNodeByName(name) {
+  var page = figma.currentPage;
+  function search(node) {
+    if (node.name === name) return node;
+    if ('children' in node) {
+      for (var i = 0; i < node.children.length; i++) {
+        var found = search(node.children[i]);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  return search(page);
+}
+
+// 폰트 로드 헬퍼
+async function loadAIFont(fontWeight) {
+  var style = 'Regular';
+  if (fontWeight === 'Bold' || fontWeight === 'bold') style = 'Bold';
+  else if (fontWeight === 'Medium' || fontWeight === 'medium') style = 'Medium';
+  else if (fontWeight === 'SemiBold') style = 'SemiBold';
+  else if (fontWeight === 'Light' || fontWeight === 'light') style = 'Light';
+  var fonts = [
+    { family: 'Inter', style: style },
+    { family: 'Roboto', style: style },
+    { family: 'Inter', style: 'Regular' }
+  ];
+  for (var i = 0; i < fonts.length; i++) {
+    try { await figma.loadFontAsync(fonts[i]); return fonts[i]; } catch(e) {}
+  }
+  return { family: 'Inter', style: 'Regular' };
+}
+
+// AI 명령 배열 실행
+async function executeAICommands(commands) {
+  if (!commands || !commands.length) {
+    figma.ui.postMessage({ type: 'ai-generate-result', success: false, error: '명령이 없습니다' });
+    return;
+  }
+
+  // 생성된 노드 참조 (name → node)
+  var createdNodes = {};
+  var allCreated = [];
+
+  try {
+    for (var i = 0; i < commands.length; i++) {
+      var cmd = commands[i];
+
+      // ─── createFrame ───
+      if (cmd.action === 'createFrame') {
+        var frame = figma.createFrame();
+        frame.name = cmd.name || ('Frame ' + (i+1));
+        frame.resize(
+          typeof cmd.width === 'number' ? cmd.width : 375,
+          typeof cmd.height === 'number' ? cmd.height : 812
+        );
+        frame.x = typeof cmd.x === 'number' ? cmd.x : 0;
+        frame.y = typeof cmd.y === 'number' ? cmd.y : 0;
+
+        // 배경색
+        if (cmd.fill) {
+          var rgb = hexToRGB(cmd.fill);
+          frame.fills = [{ type: 'SOLID', color: rgb }];
+        } else {
+          frame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+        }
+
+        // 둥근 모서리
+        if (cmd.cornerRadius) frame.cornerRadius = cmd.cornerRadius;
+
+        // Auto Layout
+        var hasLayout = cmd.layout === 'horizontal' || cmd.layout === 'vertical' ||
+                        cmd.gap != null || cmd.padding != null;
+        if (hasLayout) {
+          frame.layoutMode = cmd.layout === 'horizontal' ? 'HORIZONTAL' : 'VERTICAL';
+          if (cmd.gap != null) frame.itemSpacing = cmd.gap;
+          if (cmd.padding != null) {
+            var p = cmd.padding;
+            frame.paddingTop = p; frame.paddingBottom = p;
+            frame.paddingLeft = p; frame.paddingRight = p;
+          }
+        }
+
+        // 부모 설정
+        if (cmd.parentName && createdNodes[cmd.parentName]) {
+          createdNodes[cmd.parentName].appendChild(frame);
+        } else if (cmd.parentId) {
+          var parentNode = figma.getNodeById(cmd.parentId);
+          if (parentNode && 'appendChild' in parentNode) parentNode.appendChild(frame);
+          else figma.currentPage.appendChild(frame);
+        } else {
+          figma.currentPage.appendChild(frame);
+        }
+
+        createdNodes[frame.name] = frame;
+        allCreated.push(frame);
+
+      // ─── createText ───
+      } else if (cmd.action === 'createText') {
+        var fontDef = await loadAIFont(cmd.fontWeight);
+        var text = figma.createText();
+        text.name = cmd.name || ('Text ' + (i+1));
+        await figma.loadFontAsync(fontDef);
+        text.fontName = fontDef;
+        text.characters = cmd.content || '';
+        if (cmd.fontSize) text.fontSize = cmd.fontSize;
+        if (cmd.color) {
+          var rgb = hexToRGB(cmd.color);
+          text.fills = [{ type: 'SOLID', color: rgb }];
+        }
+        if (cmd.width) {
+          text.textAutoResize = 'HEIGHT';
+          text.resize(cmd.width, text.height);
+        }
+        text.x = typeof cmd.x === 'number' ? cmd.x : 0;
+        text.y = typeof cmd.y === 'number' ? cmd.y : 0;
+
+        if (cmd.parentName && createdNodes[cmd.parentName]) {
+          createdNodes[cmd.parentName].appendChild(text);
+        } else if (cmd.parentId) {
+          var parentNode = figma.getNodeById(cmd.parentId);
+          if (parentNode && 'appendChild' in parentNode) parentNode.appendChild(text);
+          else figma.currentPage.appendChild(text);
+        } else {
+          figma.currentPage.appendChild(text);
+        }
+
+        createdNodes[text.name] = text;
+        allCreated.push(text);
+
+      // ─── createRect ───
+      } else if (cmd.action === 'createRect') {
+        var rect = figma.createRectangle();
+        rect.name = cmd.name || ('Rect ' + (i+1));
+        rect.resize(
+          typeof cmd.width === 'number' ? cmd.width : 100,
+          typeof cmd.height === 'number' ? cmd.height : 100
+        );
+        rect.x = typeof cmd.x === 'number' ? cmd.x : 0;
+        rect.y = typeof cmd.y === 'number' ? cmd.y : 0;
+        if (cmd.fill) {
+          var rgb = hexToRGB(cmd.fill);
+          rect.fills = [{ type: 'SOLID', color: rgb }];
+        }
+        if (cmd.cornerRadius) rect.cornerRadius = cmd.cornerRadius;
+
+        if (cmd.parentName && createdNodes[cmd.parentName]) {
+          createdNodes[cmd.parentName].appendChild(rect);
+        } else if (cmd.parentId) {
+          var parentNode = figma.getNodeById(cmd.parentId);
+          if (parentNode && 'appendChild' in parentNode) parentNode.appendChild(rect);
+          else figma.currentPage.appendChild(rect);
+        } else {
+          figma.currentPage.appendChild(rect);
+        }
+
+        createdNodes[rect.name] = rect;
+        allCreated.push(rect);
+
+      // ─── createEllipse ───
+      } else if (cmd.action === 'createEllipse') {
+        var ellipse = figma.createEllipse();
+        ellipse.name = cmd.name || ('Ellipse ' + (i+1));
+        ellipse.resize(
+          typeof cmd.width === 'number' ? cmd.width : 48,
+          typeof cmd.height === 'number' ? cmd.height : 48
+        );
+        ellipse.x = typeof cmd.x === 'number' ? cmd.x : 0;
+        ellipse.y = typeof cmd.y === 'number' ? cmd.y : 0;
+        if (cmd.fill) {
+          var rgb = hexToRGB(cmd.fill);
+          ellipse.fills = [{ type: 'SOLID', color: rgb }];
+        }
+
+        if (cmd.parentName && createdNodes[cmd.parentName]) {
+          createdNodes[cmd.parentName].appendChild(ellipse);
+        } else if (cmd.parentId) {
+          var parentNode = figma.getNodeById(cmd.parentId);
+          if (parentNode && 'appendChild' in parentNode) parentNode.appendChild(ellipse);
+          else figma.currentPage.appendChild(ellipse);
+        } else {
+          figma.currentPage.appendChild(ellipse);
+        }
+
+        createdNodes[ellipse.name] = ellipse;
+        allCreated.push(ellipse);
+
+      // ─── updateText ───
+      } else if (cmd.action === 'updateText') {
+        var target = findNodeByName(cmd.layerName);
+        if (target && target.type === 'TEXT') {
+          await figma.loadFontAsync(target.fontName);
+          target.characters = cmd.content || target.characters;
+        }
+
+      // ─── updateFill ───
+      } else if (cmd.action === 'updateFill') {
+        var target = findNodeByName(cmd.layerName);
+        if (target && 'fills' in target && cmd.fill) {
+          var rgb = hexToRGB(cmd.fill);
+          target.fills = [{ type: 'SOLID', color: rgb }];
+        }
+
+      // ─── alignSelection ───
+      } else if (cmd.action === 'alignSelection') {
+        var selection = figma.currentPage.selection;
+        if (selection.length > 1) {
+          var gap = typeof cmd.gap === 'number' ? cmd.gap : 16;
+          var sorted = selection.slice().sort(function(a, b) {
+            return cmd.direction === 'vertical' ? a.y - b.y : a.x - b.x;
+          });
+          var cursor = cmd.direction === 'vertical' ? sorted[0].y : sorted[0].x;
+          for (var j = 0; j < sorted.length; j++) {
+            if (cmd.direction === 'vertical') {
+              sorted[j].y = cursor;
+              cursor += sorted[j].height + gap;
+            } else {
+              sorted[j].x = cursor;
+              cursor += sorted[j].width + gap;
+            }
+          }
+        }
+      }
+    }
+
+    // 생성된 노드들 선택
+    if (allCreated.length > 0) {
+      figma.currentPage.selection = allCreated;
+      figma.viewport.scrollAndZoomIntoView(allCreated);
+    }
+
+    figma.ui.postMessage({
+      type: 'ai-generate-result',
+      success: true,
+      count: allCreated.length
+    });
+
+  } catch(e) {
+    figma.ui.postMessage({
+      type: 'ai-generate-result',
+      success: false,
+      error: e.message
+    });
+  }
 }
