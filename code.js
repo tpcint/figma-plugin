@@ -2587,70 +2587,70 @@ function mapAlignItems(val) {
 }
 
 // .pen 노드 → Figma 노드 재귀 변환
-async function convertPenNode(penNode) {
+// parentPenNode: 부모 .pen 노드 (fill_container 처리에 사용)
+async function convertPenNode(penNode, parentPenNode) {
   if (!penNode || !penNode.type) return null;
 
   var type = penNode.type;
 
-  // ── icon_font: 아이콘 폰트 → 색상 적용된 작은 프레임으로 표현 ──
+  // ── icon_font: 아이콘 컬러 원형 프레임 ──
   if (type === 'icon_font') {
     var iconW = (typeof penNode.width === 'number' && penNode.width > 0) ? penNode.width : 24;
     var iconH = (typeof penNode.height === 'number' && penNode.height > 0) ? penNode.height : 24;
-    var iconFrame = figma.createFrame();
-    iconFrame.name = penNode.name || 'Icon';
-    iconFrame.resize(iconW, iconH);
-    iconFrame.cornerRadius = Math.floor(iconW * 0.2); // 약간 둥글게
-    iconFrame.clipsContent = true;
-
     var iconColorStr = resolvePenColor(penNode.fill);
     var iconRgb = iconColorStr ? hexToFigmaRgb(iconColorStr) : null;
+
+    // 아이콘을 단색 원 또는 사각형으로 표현 (Lucide 계열은 원형)
+    var iconEl = figma.createEllipse();
+    iconEl.name = penNode.name || 'Icon';
+    iconEl.resize(iconW, iconH);
     if (iconRgb) {
-      iconFrame.fills = [{ type: 'SOLID', color: { r: iconRgb.r, g: iconRgb.g, b: iconRgb.b }, opacity: iconRgb.a !== undefined ? iconRgb.a : 1 }];
+      var iconFill = { type: 'SOLID', color: { r: iconRgb.r, g: iconRgb.g, b: iconRgb.b } };
+      if (iconRgb.a !== undefined && iconRgb.a < 0.999) iconFill.opacity = iconRgb.a;
+      iconEl.fills = [iconFill];
     } else {
-      iconFrame.fills = [{ type: 'SOLID', color: { r: 0.6, g: 0.6, b: 0.65 } }];
+      iconEl.fills = [{ type: 'SOLID', color: { r: 0.6, g: 0.6, b: 0.65 } }];
     }
-    iconFrame.strokes = [];
-    // 아이콘 이름 텍스트 (작게)
-    try {
-      await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-      var iconLabel = figma.createText();
-      iconLabel.fontName = { family: 'Inter', style: 'Regular' };
-      var labelSize = Math.max(6, Math.floor(iconW * 0.35));
-      iconLabel.fontSize = labelSize;
-      var iconName = (penNode.iconFontName || penNode.name || '').slice(0, 3);
-      iconLabel.characters = iconName;
-      iconLabel.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 }, opacity: 0.8 }];
-      iconFrame.layoutMode = 'HORIZONTAL';
-      iconFrame.primaryAxisAlignItems = 'CENTER';
-      iconFrame.counterAxisAlignItems = 'CENTER';
-      iconFrame.appendChild(iconLabel);
-      iconFrame.layoutMode = 'NONE';
-      iconLabel.x = Math.floor((iconW - iconLabel.width) / 2);
-      iconLabel.y = Math.floor((iconH - iconLabel.height) / 2);
-    } catch(e) {}
-    return iconFrame;
+    iconEl.strokes = [];
+    return iconEl;
   }
 
   // ── frame / group ──
   if (type === 'frame' || type === 'group') {
     var frame = figma.createFrame();
     frame.name = penNode.name || 'Frame';
+    frame.clipsContent = penNode.clip !== false; // 기본 true
 
-    // 크기: fill_container/null → 일단 100으로 초기화 (부모 appendChild 후 sizing 적용)
-    var w = (typeof penNode.width === 'number' && penNode.width > 0) ? penNode.width : 100;
-    var h = (typeof penNode.height === 'number' && penNode.height > 0) ? penNode.height : 100;
-    frame.resize(w, h);
+    // 부모가 Auto Layout인지 확인
+    var parentHasLayout = parentPenNode && (
+      parentPenNode.layout === 'horizontal' ||
+      parentPenNode.layout === 'vertical' ||
+      parentPenNode.justifyContent || parentPenNode.alignItems ||
+      parentPenNode.gap != null || parentPenNode.padding != null
+    );
+
+    // 크기 결정
+    var wSpec = penNode.width;   // 'fill_container' | number | null
+    var hSpec = penNode.height;  // 'fill_container' | number | null
+    var wNum = (typeof wSpec === 'number' && wSpec > 0) ? wSpec : 100;
+    var hNum = (typeof hSpec === 'number' && hSpec > 0) ? hSpec : 100;
+
+    // fill_container인데 부모에 Auto Layout 없으면 → 부모 크기 그대로 사용
+    if (wSpec === 'fill_container' && !parentHasLayout && parentPenNode) {
+      wNum = (typeof parentPenNode.width === 'number' && parentPenNode.width > 0) ? parentPenNode.width : 100;
+    }
+    if (hSpec === 'fill_container' && !parentHasLayout && parentPenNode) {
+      hNum = (typeof parentPenNode.height === 'number' && parentPenNode.height > 0) ? parentPenNode.height : 100;
+    }
+    frame.resize(wNum, hNum);
 
     // 배경색
     applyPenFill(frame, penNode.fill);
 
     // 불투명도
-    if (penNode.opacity != null) frame.opacity = penNode.opacity;
+    if (penNode.opacity != null) { try { frame.opacity = penNode.opacity; } catch(e) {} }
 
-    // clip
-    frame.clipsContent = penNode.clip !== false; // 기본 true
-
-    // 모서리 반경 (999 같은 큰 값도 허용)
+    // 모서리 반경
     if (penNode.cornerRadius != null) {
       try {
         if (Array.isArray(penNode.cornerRadius)) {
@@ -2664,15 +2664,14 @@ async function convertPenNode(penNode) {
       } catch(e) {}
     }
 
-    // ── Auto Layout ──
+    // ── Auto Layout 결정 ──
     var hasLayout = penNode.layout === 'horizontal' || penNode.layout === 'vertical';
-    // gap/padding/justify/align 중 하나라도 있으면 Auto Layout 활성화
     var hasAutoHints = (penNode.gap != null) || (penNode.padding != null) || (penNode.justifyContent) || (penNode.alignItems);
 
     if (hasLayout || hasAutoHints) {
       frame.layoutMode = (penNode.layout === 'vertical') ? 'VERTICAL' : 'HORIZONTAL';
 
-      // 패딩 (number, [v,h], [t,r,b,l])
+      // 패딩 (number | [v,h] | [t,r,b,l])
       if (penNode.padding != null) {
         var p = penNode.padding;
         try {
@@ -2681,8 +2680,8 @@ async function convertPenNode(penNode) {
               frame.paddingTop = frame.paddingBottom = p[0] || 0;
               frame.paddingLeft = frame.paddingRight = p[1] || 0;
             } else if (p.length === 3) {
-              frame.paddingTop    = p[0] || 0;
-              frame.paddingLeft   = frame.paddingRight = p[1] || 0;
+              frame.paddingTop = p[0] || 0;
+              frame.paddingLeft = frame.paddingRight = p[1] || 0;
               frame.paddingBottom = p[2] || 0;
             } else if (p.length >= 4) {
               frame.paddingTop    = p[0] || 0;
@@ -2697,20 +2696,14 @@ async function convertPenNode(penNode) {
       }
 
       // 간격
-      if (penNode.gap != null) {
-        try { frame.itemSpacing = penNode.gap; } catch(e) {}
-      }
+      if (penNode.gap != null) { try { frame.itemSpacing = penNode.gap; } catch(e) {} }
 
       // 정렬
       try {
-        var jc = penNode.justifyContent || 'start';
-        var ai = penNode.alignItems || 'start';
-        frame.primaryAxisAlignItems = mapJustify(jc);
-        frame.counterAxisAlignItems = mapAlignItems(ai);
+        frame.primaryAxisAlignItems = mapJustify(penNode.justifyContent || 'start');
+        frame.counterAxisAlignItems = mapAlignItems(penNode.alignItems || 'start');
       } catch(e) {}
 
-      // 주축 sizing: height=null이면 HUG (자식 추가 후 적용)
-      // 교차축 sizing
     } else {
       frame.layoutMode = 'NONE';
     }
@@ -2718,17 +2711,20 @@ async function convertPenNode(penNode) {
     // 테두리
     applyPenStroke(frame, penNode);
 
-    // 자식 노드 재귀 생성
+    // ── 자식 노드 재귀 생성 ──
     if (Array.isArray(penNode.children)) {
       for (var ci = 0; ci < penNode.children.length; ci++) {
         var child = penNode.children[ci];
         try {
-          var childNode = await convertPenNode(child);
+          var childNode = await convertPenNode(child, penNode);  // 부모 전달
           if (childNode) {
             frame.appendChild(childNode);
-            // appendChild 후에 sizing 적용 (fill_container는 부모가 있어야 가능)
+            // Auto Layout 자식: appendChild 후 sizing
             if (frame.layoutMode !== 'NONE') {
               applyPenSizing(childNode, child);
+            } else {
+              // Auto Layout 없는 부모: fill_container 자식 → 절대 위치(0,0) + 부모 크기
+              applyAbsoluteSizing(childNode, child, frame);
             }
           }
         } catch (childErr) {
@@ -2737,14 +2733,13 @@ async function convertPenNode(penNode) {
       }
     }
 
-    // 자식 모두 추가 후 자기 자신 sizing 처리
-    // width/height가 null이면 HUG (Auto Layout 부모가 있다는 전제)
+    // 자기 자신 sizing (Auto Layout 내부에서만 유효, 부모 append 후 적용됨)
     if (frame.layoutMode !== 'NONE') {
       try {
-        if (!(typeof penNode.width === 'number' && penNode.width > 0) && penNode.width !== 'fill_container') {
+        if (wSpec !== 'fill_container' && !(typeof wSpec === 'number' && wSpec > 0)) {
           frame.layoutSizingHorizontal = 'HUG';
         }
-        if (!(typeof penNode.height === 'number' && penNode.height > 0) && penNode.height !== 'fill_container') {
+        if (hSpec !== 'fill_container' && !(typeof hSpec === 'number' && hSpec > 0)) {
           frame.layoutSizingVertical = 'HUG';
         }
       } catch(e) {}
@@ -2824,7 +2819,9 @@ async function convertPenNode(penNode) {
     if (textColorStr) {
       var textRgb = hexToFigmaRgb(textColorStr);
       if (textRgb) {
-        text.fills = [{ type: 'SOLID', color: { r: textRgb.r, g: textRgb.g, b: textRgb.b }, opacity: textRgb.a !== undefined ? textRgb.a : 1 }];
+        var textFillEntry = { type: 'SOLID', color: { r: textRgb.r, g: textRgb.g, b: textRgb.b } };
+        if (textRgb.a !== undefined && textRgb.a < 0.999) textFillEntry.opacity = textRgb.a;
+        text.fills = [textFillEntry];
       }
     } else {
       text.fills = [{ type: 'SOLID', color: { r: 0.07, g: 0.06, b: 0.1 } }];
@@ -3017,7 +3014,6 @@ function applyPenSizing(figmaNode, penNode) {
     if (w === 'fill_container') {
       figmaNode.layoutSizingHorizontal = 'FILL';
     } else if (w === 'hug_content' || w === null || w === undefined) {
-      // HUG은 Auto Layout 노드에만 적용 가능
       if (figmaNode.layoutMode && figmaNode.layoutMode !== 'NONE') {
         figmaNode.layoutSizingHorizontal = 'HUG';
       }
@@ -3039,6 +3035,29 @@ function applyPenSizing(figmaNode, penNode) {
   } catch(e) {}
 }
 
+// Auto Layout 없는 부모 내 절대 배치 자식 처리
+// fill_container → 부모 크기에 맞춤 (position 0,0)
+function applyAbsoluteSizing(figmaNode, penNode, parentFrame) {
+  try {
+    var w = penNode.width;
+    var h = penNode.height;
+    var pw = parentFrame.width;
+    var ph = parentFrame.height;
+    var newW = figmaNode.width;
+    var newH = figmaNode.height;
+    var changed = false;
+
+    if (w === 'fill_container' && pw > 0) { newW = pw; changed = true; }
+    if (h === 'fill_container' && ph > 0) { newH = ph; changed = true; }
+
+    if (changed) {
+      figmaNode.resize(newW, newH);
+      figmaNode.x = 0;
+      figmaNode.y = 0;
+    }
+  } catch(e) {}
+}
+
 // Primary/Counter axis 정렬 매핑 (기존 코드 호환용)
 function mapAlign(align) {
   var map = {
@@ -3050,6 +3069,7 @@ function mapAlign(align) {
 
 // .pen 폰트 weight → Figma style 이름
 function penFontWeightToStyle(weight) {
+  if (!weight || weight === 'normal' || weight === 'NONE') return 'Regular';
   if (typeof weight === 'number') {
     if (weight <= 100) return 'Thin';
     if (weight <= 200) return 'ExtraLight';
@@ -3061,14 +3081,15 @@ function penFontWeightToStyle(weight) {
     if (weight <= 800) return 'ExtraBold';
     return 'Black';
   }
-  // 문자열 weight ('700' 같은 숫자 문자열 포함)
+  // 문자열 ('700' 숫자 문자열 포함)
   var numW = parseInt(weight);
   if (!isNaN(numW)) return penFontWeightToStyle(numW);
   var map = {
     thin: 'Thin', extralight: 'ExtraLight', light: 'Light',
     regular: 'Regular', normal: 'Regular', medium: 'Medium',
-    semibold: 'SemiBold', 'semi bold': 'Semi Bold', bold: 'Bold',
-    extrabold: 'ExtraBold', black: 'Black'
+    semibold: 'SemiBold', 'semi-bold': 'SemiBold', bold: 'Bold',
+    extrabold: 'ExtraBold', 'extra-bold': 'ExtraBold', black: 'Black',
+    heavy: 'Black'
   };
-  return map[(weight || '').toLowerCase()] || 'Regular';
+  return map[(weight + '').toLowerCase()] || 'Regular';
 }
