@@ -2205,9 +2205,10 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
       // 테이블 Variables 결과 메시지
       if (msg.type === 'table-variables-status') {
+        if (window._tableVarStatusHandler) window._tableVarStatusHandler(msg);
         showTableVarsStatus(msg.message, msg.status);
-        const btn = document.getElementById('createTableVarsBtn');
-        if (btn) btn.classList.remove('loading');
+        var tBtn = document.getElementById('createTableVarsBtn');
+        if (tBtn) tBtn.classList.remove('loading');
       }
 
       // Checker 관련 메시지
@@ -3066,13 +3067,31 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     // ===== 테이블 토큰 파서 (Light/Dark 모드) =====
 
     // 텍스트 표 → [{name, light, dark}] 파싱
+    // 행 하나를 컬럼 배열로 분리 (탭, 쉼표, |, 2개 이상 공백 모두 지원)
+    function splitTableRow(line) {
+      // 탭이 있으면 탭 우선
+      if (line.indexOf('\t') >= 0) {
+        return line.split('\t').map(function(c) { return c.trim(); });
+      }
+      // 쉼표 구분 (HEX 안의 쉼표는 없으므로 안전)
+      if (line.indexOf(',') >= 0) {
+        return line.split(',').map(function(c) { return c.trim(); });
+      }
+      // | 구분
+      if (line.indexOf('|') >= 0) {
+        return line.split('|').map(function(c) { return c.trim(); }).filter(function(c) { return c; });
+      }
+      // 2개 이상 공백 구분
+      return line.split(/\s{2,}/).map(function(c) { return c.trim(); });
+    }
+
     function parseTableTokens(text) {
       var lines = text.trim().split('\n').filter(function(l) { return l.trim(); });
       if (!lines.length) return [];
 
-      // 헤더 행 감지 (Level, Light, Dark 포함 여부)
+      // 헤더 행 감지
       var headerLine = lines[0];
-      var cols = headerLine.split(/\t|  {2,}|\|/).map(function(c) { return c.trim().toLowerCase(); });
+      var cols = splitTableRow(headerLine).map(function(c) { return c.toLowerCase().replace(/[()（）\s]/g, ''); });
 
       var levelIdx = -1, lightIdx = -1, darkIdx = -1;
       cols.forEach(function(c, i) {
@@ -3081,7 +3100,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         else if (c.indexOf('dark') >= 0) darkIdx = i;
       });
 
-      // 헤더가 없으면 첫 행도 데이터로 처리 (컬럼 0=이름, 1=light, 2=dark 기본값)
+      // 헤더 없으면 첫 행도 데이터 (컬럼 0=이름, 1=light, 2=dark)
       var dataLines = (levelIdx >= 0 || lightIdx >= 0) ? lines.slice(1) : lines;
       if (levelIdx < 0) levelIdx = 0;
       if (lightIdx < 0) lightIdx = 1;
@@ -3089,25 +3108,18 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
       var tokens = [];
       dataLines.forEach(function(line) {
-        var parts = line.split(/\t|  {2,}|\|/).map(function(c) { return c.trim().replace(/[()（）]/g, '').trim(); });
+        var parts = splitTableRow(line).map(function(c) { return c.replace(/[()（）]/g, '').trim(); });
         var name = parts[levelIdx] || '';
-        var light = parts[lightIdx] || '';
-        var dark = parts[darkIdx] || '';
-
-        if (!name) return;
-
-        // HEX 값 정규화 (#RRGGBB)
-        light = normalizeHex(light);
-        dark = normalizeHex(dark);
-
-        if (light || dark) {
-          tokens.push({ name: name, light: light || dark, dark: dark || light });
-        }
+        var light = normalizeHex(parts[lightIdx] || '');
+        var dark  = normalizeHex(parts[darkIdx]  || '');
+        if (!name || (!light && !dark)) return;
+        tokens.push({ name: name, light: light || dark, dark: dark || light });
       });
       return tokens;
     }
 
     function normalizeHex(val) {
+      if (!val) return '';
       var m = val.match(/#?([0-9A-Fa-f]{3,8})/);
       if (!m) return '';
       var h = m[1];
@@ -3119,7 +3131,12 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       var el = document.getElementById('tableVarsStatus');
       if (!el) return;
       el.textContent = msg;
-      el.className = 'status' + (type ? ' status-' + type : '');
+      // 기존 status 클래스 시스템에 맞게 매핑
+      var cls = 'status';
+      if (type === 'success') cls += ' success';
+      else if (type === 'error') cls += ' error';
+      else if (type === 'info') cls += ' info';
+      el.className = cls;
     }
 
     function previewTableTokens() {
@@ -3158,12 +3175,28 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       if (!input.trim()) { showTableVarsStatus('표를 붙여넣어주세요', 'error'); return; }
 
       var tokens = parseTableTokens(input);
-      if (!tokens.length) { showTableVarsStatus('인식된 토큰이 없습니다', 'error'); return; }
+      if (!tokens.length) {
+        showTableVarsStatus('토큰을 인식하지 못했습니다. 👁️ 미리보기로 먼저 확인해보세요.', 'error');
+        return;
+      }
 
-      var collectionName = document.getElementById('tableCollectionName').value || 'Color Tokens';
+      var collectionName = document.getElementById('tableCollectionName').value.trim() || 'Color Tokens';
       var btn = document.getElementById('createTableVarsBtn');
       btn.classList.add('loading');
-      showTableVarsStatus('베리어블 생성 중...', 'info');
+      showTableVarsStatus(tokens.length + '개 베리어블 생성 중...', 'info');
+
+      // 5초 안에 응답 없으면 로딩 해제 (안전장치)
+      var timeout = setTimeout(function() {
+        btn.classList.remove('loading');
+        showTableVarsStatus('응답 없음 — 플러그인을 다시 시도해주세요', 'error');
+      }, 5000);
+
+      // 결과 수신 후 timeout 취소
+      var origStatus = window._tableVarStatusHandler;
+      window._tableVarStatusHandler = function(msg) {
+        clearTimeout(timeout);
+        window._tableVarStatusHandler = origStatus;
+      };
 
       parent.postMessage({
         pluginMessage: {
