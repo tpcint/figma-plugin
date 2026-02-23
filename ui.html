@@ -73,6 +73,18 @@
       font-weight: 600;
     }
 
+    .tab-dragging {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .tab-placeholder {
+      flex: 0 0 auto;
+      height: 42px;
+      background: #E8E9F2;
+      border-radius: 6px;
+    }
+
     .tab.active::after {
       content: '';
       position: absolute;
@@ -1846,47 +1858,121 @@ export default function Component() {
     let currentVariableType = 'auto';  // Variables 탭용
 
     // ===== 탭 드래그 스크롤 =====
+    // ===== 탭 순서 변경 + 전환 =====
     const tabsScroller = document.getElementById('tabsScroller');
-    let isTabDragging = false;
-    let tabStartX;
-    let tabScrollLeft;
 
-    tabsScroller.addEventListener('mousedown', (e) => {
-      isTabDragging = true;
-      tabsScroller.style.cursor = 'grabbing';
-      tabStartX = e.pageX - tabsScroller.offsetLeft;
-      tabScrollLeft = tabsScroller.scrollLeft;
-    });
+    // 저장된 순서 복원
+    (function restoreTabOrder() {
+      try {
+        var saved = localStorage.getItem('tabOrder');
+        if (!saved) return;
+        var order = JSON.parse(saved);
+        order.forEach(function(tabId) {
+          var el = tabsScroller.querySelector('[data-tab="' + tabId + '"]');
+          if (el) tabsScroller.appendChild(el);
+        });
+      } catch(e) {}
+    })();
 
-    tabsScroller.addEventListener('mouseleave', () => {
-      isTabDragging = false;
-      tabsScroller.style.cursor = 'grab';
-    });
+    function saveTabOrder() {
+      var order = Array.from(tabsScroller.querySelectorAll('.tab')).map(function(t) { return t.dataset.tab; });
+      try { localStorage.setItem('tabOrder', JSON.stringify(order)); } catch(e) {}
+    }
 
-    tabsScroller.addEventListener('mouseup', () => {
-      isTabDragging = false;
-      tabsScroller.style.cursor = 'grab';
-    });
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+    }
 
-    tabsScroller.addEventListener('mousemove', (e) => {
-      if (!isTabDragging) return;
-      e.preventDefault();
-      const x = e.pageX - tabsScroller.offsetLeft;
-      const walk = (x - tabStartX) * 1.5;
-      tabsScroller.scrollLeft = tabScrollLeft - walk;
-    });
+    // 드래그로 탭 순서 변경
+    var dragTab = null;
+    var dragStartX = 0;
+    var dragMoved = false;
+    var placeholder = null;
 
-    // 탭 전환
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.onclick = (e) => {
-        // 드래그 중이면 클릭 무시
-        if (Math.abs(e.pageX - tabsScroller.offsetLeft - tabStartX) > 5) return;
+    function onTabMouseDown(e) {
+      dragTab = this;
+      dragStartX = e.clientX;
+      dragMoved = false;
 
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
-      };
+      // placeholder: 드래그 중 빈 자리 표시
+      placeholder = document.createElement('div');
+      placeholder.className = 'tab-placeholder';
+      placeholder.style.width = dragTab.offsetWidth + 'px';
+
+      document.addEventListener('mousemove', onTabMouseMove);
+      document.addEventListener('mouseup', onTabMouseUp);
+    }
+
+    function onTabMouseMove(e) {
+      if (!dragTab) return;
+      var dx = Math.abs(e.clientX - dragStartX);
+      if (!dragMoved && dx < 6) return;
+
+      // 드래그 시작
+      if (!dragMoved) {
+        dragMoved = true;
+        dragTab.classList.add('tab-dragging');
+        dragTab.parentNode.insertBefore(placeholder, dragTab);
+        tabsScroller.style.cursor = 'grabbing';
+      }
+
+      // 마우스 위치로 탭 이동
+      var scrollerRect = tabsScroller.getBoundingClientRect();
+      var relX = e.clientX - scrollerRect.left + tabsScroller.scrollLeft;
+
+      // 어느 탭 옆에 놓을지 계산
+      var tabs = Array.from(tabsScroller.querySelectorAll('.tab:not(.tab-dragging)'));
+      var inserted = false;
+      for (var i = 0; i < tabs.length; i++) {
+        var t = tabs[i];
+        var tRect = t.getBoundingClientRect();
+        var tCenter = tRect.left - scrollerRect.left + tabsScroller.scrollLeft + tRect.width / 2;
+        if (relX < tCenter) {
+          tabsScroller.insertBefore(placeholder, t);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) tabsScroller.appendChild(placeholder);
+
+      // 자동 스크롤
+      var edgeX = e.clientX - scrollerRect.left;
+      if (edgeX < 40) tabsScroller.scrollLeft -= 6;
+      else if (edgeX > scrollerRect.width - 40) tabsScroller.scrollLeft += 6;
+    }
+
+    function onTabMouseUp(e) {
+      document.removeEventListener('mousemove', onTabMouseMove);
+      document.removeEventListener('mouseup', onTabMouseUp);
+
+      if (!dragTab) return;
+
+      if (dragMoved && placeholder && placeholder.parentNode) {
+        // placeholder 자리에 실제 탭 삽입
+        placeholder.parentNode.insertBefore(dragTab, placeholder);
+        placeholder.remove();
+        dragTab.classList.remove('tab-dragging');
+        tabsScroller.style.cursor = '';
+        saveTabOrder();
+      } else {
+        // 클릭 (드래그 없음) → 탭 전환
+        if (placeholder && placeholder.parentNode) placeholder.remove();
+        if (dragTab) dragTab.classList.remove('tab-dragging');
+        tabsScroller.style.cursor = '';
+        switchTab(dragTab);
+      }
+
+      dragTab = null;
+      placeholder = null;
+      dragMoved = false;
+    }
+
+    // 모든 탭에 이벤트 연결
+    document.querySelectorAll('.tab').forEach(function(tab) {
+      tab.addEventListener('mousedown', onTabMouseDown);
     });
 
     // ===== Rename 탭 =====
