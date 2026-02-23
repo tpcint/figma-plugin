@@ -175,6 +175,11 @@ figma.ui.onmessage = async (msg) => {
     await createTextStylesFromTokens(msg.tokens);
   }
 
+  // 테이블 토큰 → Light/Dark 모드 베리어블 생성
+  if (msg.type === 'create-table-variables') {
+    await createTableVariables(msg.collectionName, msg.tokens);
+  }
+
   // .pen 프레임 변환
   if (msg.type === 'convert-pen-frames') {
     await convertPenFrames(msg.frames, msg.variables);
@@ -3358,4 +3363,101 @@ async function executeAICommands(commands) {
       error: e.message
     });
   }
+}
+
+// ===== 테이블 토큰 → Light/Dark 모드 베리어블 생성/업데이트 =====
+async function createTableVariables(collectionName, tokens) {
+  try {
+    figma.ui.postMessage({ type: 'table-variables-status', status: 'info', message: '베리어블 컬렉션 준비 중...' });
+
+    // 컬렉션 찾기 또는 생성
+    var collection = figma.variables.getLocalVariableCollections()
+      .find(function(c) { return c.name === collectionName; });
+
+    if (!collection) {
+      collection = figma.variables.createVariableCollection(collectionName);
+    }
+
+    // Light 모드 확인/생성
+    var lightMode = collection.modes.find(function(m) { return m.name === 'Light'; });
+    if (!lightMode) {
+      // 첫 번째 기본 모드를 Light로 이름 변경
+      collection.renameMode(collection.modes[0].id, 'Light');
+      lightMode = collection.modes[0];
+    }
+    var lightModeId = lightMode.id;
+
+    // Dark 모드 확인/생성
+    var darkMode = collection.modes.find(function(m) { return m.name === 'Dark'; });
+    if (!darkMode) {
+      var darkModeId = collection.addMode('Dark');
+      darkMode = collection.modes.find(function(m) { return m.id === darkModeId; });
+    }
+    var darkModeId = darkMode.id;
+
+    var created = 0, updated = 0, errors = [];
+
+    for (var i = 0; i < tokens.length; i++) {
+      var token = tokens[i];
+      try {
+        var lightRgb = hexToFigmaRgb(token.light);
+        var darkRgb = hexToFigmaRgb(token.dark);
+        if (!lightRgb || !darkRgb) {
+          errors.push(token.name + ': 색상 파싱 실패');
+          continue;
+        }
+
+        // 기존 변수 찾기
+        var existing = figma.variables.getLocalVariables('COLOR')
+          .find(function(v) { return v.name === token.name && v.variableCollectionId === collection.id; });
+
+        if (existing) {
+          // 업데이트
+          existing.setValueForMode(lightModeId, { r: lightRgb.r, g: lightRgb.g, b: lightRgb.b, a: 1 });
+          existing.setValueForMode(darkModeId, { r: darkRgb.r, g: darkRgb.g, b: darkRgb.b, a: 1 });
+          updated++;
+        } else {
+          // 새로 생성
+          var variable = figma.variables.createVariable(token.name, collection, 'COLOR');
+          variable.setValueForMode(lightModeId, { r: lightRgb.r, g: lightRgb.g, b: lightRgb.b, a: 1 });
+          variable.setValueForMode(darkModeId, { r: darkRgb.r, g: darkRgb.g, b: darkRgb.b, a: 1 });
+          created++;
+        }
+      } catch(e) {
+        errors.push(token.name + ': ' + e.message);
+      }
+    }
+
+    var msg = '';
+    if (created > 0) msg += created + '개 생성 ';
+    if (updated > 0) msg += updated + '개 업데이트 ';
+    msg += '완료! (Light/Dark 모드)';
+    if (errors.length > 0) msg += '\n⚠️ ' + errors.length + '개 실패';
+
+    figma.ui.postMessage({
+      type: 'table-variables-status',
+      status: errors.length > 0 ? 'warning' : 'success',
+      message: '✅ ' + msg
+    });
+
+  } catch(e) {
+    figma.ui.postMessage({
+      type: 'table-variables-status',
+      status: 'error',
+      message: '오류: ' + e.message
+    });
+  }
+}
+
+// HEX → Figma RGB (0~1 범위)
+function hexToFigmaRgb(hex) {
+  if (!hex) return null;
+  var h = hex.replace('#', '');
+  if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  if (h.length !== 6) return null;
+  return {
+    r: parseInt(h.slice(0,2), 16) / 255,
+    g: parseInt(h.slice(2,4), 16) / 255,
+    b: parseInt(h.slice(4,6), 16) / 255
+  };
 }

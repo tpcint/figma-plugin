@@ -1397,6 +1397,31 @@
       border-color: #110F1A;
     }
 
+    /* 테이블 토큰 미리보기 */
+    .token-table-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
+    .token-table-preview-row:nth-child(odd) { background: #F8F9FB; }
+    .token-table-name { flex: 1; color: #110F1A; font-weight: 500; font-size: 12px; }
+    .token-table-swatch {
+      width: 16px; height: 16px;
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,0,0.1);
+      flex-shrink: 0;
+    }
+    .token-table-hex { font-family: monospace; font-size: 11px; color: #6B7280; width: 68px; flex-shrink: 0; }
+    .token-table-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 8px; font-size: 11px; font-weight: 700;
+      color: #9DA0B2; border-bottom: 1px solid #E8E9F2; margin-bottom: 4px;
+    }
+
   </style>
 </head>
 <body>
@@ -1758,6 +1783,41 @@ export default function Component() {
             </span>
           </button>
         </div>
+      </div>
+
+      <!-- 테이블 입력 카드 -->
+      <div class="card" style="margin-top: 4px;">
+        <h2 class="card-title">📋 Table → Variables (Light/Dark)</h2>
+        <p class="card-desc" style="color:#838499;font-size:13px;margin-bottom:14px;">
+          Figma, Notion, Excel 등에서 복사한 표를 그대로 붙여넣으세요.<br>
+          <b>Level · Light · Dark</b> 컬럼을 자동 인식합니다.
+        </p>
+
+        <div class="code-input-section">
+          <label class="input-label">Collection 이름</label>
+          <input type="text" class="input-text" id="tableCollectionName" placeholder="Color Tokens" value="Color Tokens" style="margin-bottom:12px;">
+
+          <label class="input-label">표 붙여넣기 (탭/공백 구분)</label>
+          <textarea class="code-textarea" id="tableTokenInput" style="min-height:140px;" placeholder="Level	Light (Hex)	Dark (Hex)
+Blue 100	#0A84FF	#40A0FF
+Blue 90	#2E94FF	#66B2FF
+Blue 80	#52A5FF	#8CC6FF"></textarea>
+        </div>
+
+        <div class="token-table-preview" id="tokenTablePreview" style="display:none;margin-top:12px;">
+          <div style="font-weight:600;font-size:12px;margin-bottom:6px;">📋 미리보기</div>
+          <div id="tokenTablePreviewList" style="max-height:180px;overflow-y:auto;"></div>
+        </div>
+
+        <div class="button-group" style="margin-top:14px;">
+          <button class="btn btn-secondary" onclick="previewTableTokens()">👁️ 미리보기</button>
+          <button class="btn btn-primary" id="createTableVarsBtn" onclick="createTableVariables()">
+            <span class="btn-text">✨ 베리어블 생성/업데이트</span>
+            <span class="btn-loading"><span class="btn-spinner"></span>생성 중...</span>
+          </button>
+        </div>
+
+        <div class="status" id="tableVarsStatus"></div>
       </div>
 
       <div class="card" style="margin-top: 10px;">
@@ -2169,13 +2229,19 @@ export default function Component() {
       // Variables 관련 메시지
       if (msg.type === 'variables-status') {
         showVariablesStatus(msg.message, msg.status);
-        // 성공 또는 에러 시 로딩 해제
         if (msg.status === 'success' || msg.status === 'error' || msg.status === 'warning') {
           const btn1 = document.getElementById('createVariablesBtn');
           const btn2 = document.getElementById('createTextStylesBtn');
           if (btn1) btn1.classList.remove('loading');
           if (btn2) btn2.classList.remove('loading');
         }
+      }
+
+      // 테이블 Variables 결과 메시지
+      if (msg.type === 'table-variables-status') {
+        showTableVarsStatus(msg.message, msg.status);
+        const btn = document.getElementById('createTableVarsBtn');
+        if (btn) btn.classList.remove('loading');
       }
 
       // Checker 관련 메시지
@@ -3029,6 +3095,117 @@ export default function Component() {
       } catch (e) {
         throw new Error('JSON 파싱 실패: ' + e.message);
       }
+    }
+
+    // ===== 테이블 토큰 파서 (Light/Dark 모드) =====
+
+    // 텍스트 표 → [{name, light, dark}] 파싱
+    function parseTableTokens(text) {
+      var lines = text.trim().split('\n').filter(function(l) { return l.trim(); });
+      if (!lines.length) return [];
+
+      // 헤더 행 감지 (Level, Light, Dark 포함 여부)
+      var headerLine = lines[0];
+      var cols = headerLine.split(/\t|  {2,}|\|/).map(function(c) { return c.trim().toLowerCase(); });
+
+      var levelIdx = -1, lightIdx = -1, darkIdx = -1;
+      cols.forEach(function(c, i) {
+        if (c.indexOf('level') >= 0 || c.indexOf('name') >= 0 || c.indexOf('token') >= 0) levelIdx = i;
+        else if (c.indexOf('light') >= 0) lightIdx = i;
+        else if (c.indexOf('dark') >= 0) darkIdx = i;
+      });
+
+      // 헤더가 없으면 첫 행도 데이터로 처리 (컬럼 0=이름, 1=light, 2=dark 기본값)
+      var dataLines = (levelIdx >= 0 || lightIdx >= 0) ? lines.slice(1) : lines;
+      if (levelIdx < 0) levelIdx = 0;
+      if (lightIdx < 0) lightIdx = 1;
+      if (darkIdx < 0) darkIdx = 2;
+
+      var tokens = [];
+      dataLines.forEach(function(line) {
+        var parts = line.split(/\t|  {2,}|\|/).map(function(c) { return c.trim().replace(/[()（）]/g, '').trim(); });
+        var name = parts[levelIdx] || '';
+        var light = parts[lightIdx] || '';
+        var dark = parts[darkIdx] || '';
+
+        if (!name) return;
+
+        // HEX 값 정규화 (#RRGGBB)
+        light = normalizeHex(light);
+        dark = normalizeHex(dark);
+
+        if (light || dark) {
+          tokens.push({ name: name, light: light || dark, dark: dark || light });
+        }
+      });
+      return tokens;
+    }
+
+    function normalizeHex(val) {
+      var m = val.match(/#?([0-9A-Fa-f]{3,8})/);
+      if (!m) return '';
+      var h = m[1];
+      if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+      return '#' + h.toUpperCase().slice(0, 6);
+    }
+
+    function showTableVarsStatus(msg, type) {
+      var el = document.getElementById('tableVarsStatus');
+      if (!el) return;
+      el.textContent = msg;
+      el.className = 'status' + (type ? ' status-' + type : '');
+    }
+
+    function previewTableTokens() {
+      var input = document.getElementById('tableTokenInput').value;
+      if (!input.trim()) { showTableVarsStatus('표를 붙여넣어주세요', 'error'); return; }
+
+      var tokens = parseTableTokens(input);
+      if (!tokens.length) { showTableVarsStatus('인식된 토큰이 없습니다. 헤더(Level/Light/Dark)를 포함해보세요.', 'error'); return; }
+
+      var previewEl = document.getElementById('tokenTablePreview');
+      var listEl = document.getElementById('tokenTablePreviewList');
+      previewEl.style.display = 'block';
+
+      var html = '<div class="token-table-header">'
+        + '<span style="flex:1">이름</span>'
+        + '<span class="token-table-swatch" style="background:transparent;border:none;"></span>'
+        + '<span class="token-table-hex">Light</span>'
+        + '<span class="token-table-swatch" style="background:transparent;border:none;"></span>'
+        + '<span class="token-table-hex">Dark</span>'
+        + '</div>';
+      tokens.forEach(function(t) {
+        html += '<div class="token-table-preview-row">'
+          + '<span class="token-table-name">' + t.name + '</span>'
+          + '<span class="token-table-swatch" style="background:' + t.light + '"></span>'
+          + '<span class="token-table-hex">' + t.light + '</span>'
+          + '<span class="token-table-swatch" style="background:' + t.dark + '"></span>'
+          + '<span class="token-table-hex">' + t.dark + '</span>'
+          + '</div>';
+      });
+      listEl.innerHTML = html;
+      showTableVarsStatus(tokens.length + '개 토큰 인식됨 ✅', 'success');
+    }
+
+    function createTableVariables() {
+      var input = document.getElementById('tableTokenInput').value;
+      if (!input.trim()) { showTableVarsStatus('표를 붙여넣어주세요', 'error'); return; }
+
+      var tokens = parseTableTokens(input);
+      if (!tokens.length) { showTableVarsStatus('인식된 토큰이 없습니다', 'error'); return; }
+
+      var collectionName = document.getElementById('tableCollectionName').value || 'Color Tokens';
+      var btn = document.getElementById('createTableVarsBtn');
+      btn.classList.add('loading');
+      showTableVarsStatus('베리어블 생성 중...', 'info');
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'create-table-variables',
+          collectionName: collectionName,
+          tokens: tokens
+        }
+      }, '*');
     }
 
     function previewVariables() {
