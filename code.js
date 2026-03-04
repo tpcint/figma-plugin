@@ -2,6 +2,16 @@
 
 figma.showUI(__html__, { width: 400, height: 600, themeColors: true });
 
+// 저장된 탭 순서 → UI로 전송
+(async function sendSavedPrefs() {
+  try {
+    var tabOrder = await figma.clientStorage.getAsync('tabOrder');
+    if (tabOrder) {
+      figma.ui.postMessage({ type: 'restore-tab-order', order: tabOrder });
+    }
+  } catch(e) {}
+})();
+
 // 현재 선택된 필드명 저장 (미리보기용)
 let currentFieldName = null;
 
@@ -77,6 +87,13 @@ figma.ui.onmessage = async (msg) => {
 
   if (msg.type === 'get-selection-info') {
     getSelectionInfo();
+  }
+
+  // 탭 순서 저장 (figma.clientStorage → 플러그인 재시작 후에도 유지)
+  if (msg.type === 'save-tab-order') {
+    try {
+      await figma.clientStorage.setAsync('tabOrder', msg.order);
+    } catch(e) {}
   }
 
   // 직접 텍스트 변경
@@ -165,6 +182,11 @@ figma.ui.onmessage = async (msg) => {
     await generateDesignFromCode(msg.codeType, msg.parsed, msg.rawCode);
   }
 
+  // Tailwind → Gemini 결과로 디자인 생성
+  if (msg.type === 'generate-from-tailwind') {
+    await createDesignFromGeminiResponse(msg.geminiResult);
+  }
+
   // 베리어블 생성
   if (msg.type === 'create-variables') {
     await createVariablesFromTokens(msg.collectionName, msg.tokens);
@@ -173,6 +195,17 @@ figma.ui.onmessage = async (msg) => {
   // 텍스트 스타일 생성
   if (msg.type === 'create-text-styles') {
     await createTextStylesFromTokens(msg.tokens);
+  }
+
+  // 베리어블 컬렉션 목록 조회
+  if (msg.type === 'get-variable-collections') {
+    try {
+      var cols = figma.variables.getLocalVariableCollections()
+        .map(function(c) { return { name: c.name }; });
+      figma.ui.postMessage({ type: 'variable-collections', collections: cols });
+    } catch(e) {
+      figma.ui.postMessage({ type: 'variable-collections', collections: [] });
+    }
   }
 
   // 테이블 토큰 → Light/Dark 모드 베리어블 생성
@@ -1634,14 +1667,28 @@ function compareWithNotion(notionText) {
   // 노션 텍스트 파싱 (키워드 추출)
   const notionKeywords = parseNotionContent(notionText);
 
-  // Figma에서 모든 텍스트 수집
+  // 구조 항목(# 헤더)과 텍스트 항목 분리
+  const structuralKeywords = notionKeywords.filter(k => k.isStructural);
+  const textKeywords = notionKeywords.filter(k => !k.isStructural);
+
+  // Figma에서 텍스트 노드 + 프레임 이름 수집
   const figmaTexts = [];
+  const figmaFrames = [];
   for (const node of selection) {
     collectTextsWithInfo(node, figmaTexts);
+    collectFrameNames(node, figmaFrames);
   }
 
-  // 비교 수행
-  const results = performComparison(notionKeywords, figmaTexts);
+  // 비교 수행: 구조 항목 → 프레임 이름과, 텍스트 항목 → 텍스트 노드와 비교
+  const structureResults = structuralKeywords.length > 0
+    ? performComparison(structuralKeywords, figmaFrames)
+    : [];
+  const textResults = textKeywords.length > 0
+    ? performComparison(textKeywords, figmaTexts)
+    : [];
+
+  // 화면/섹션 결과를 앞에 배치, 텍스트 결과를 뒤에
+  const results = [...structureResults, ...textResults];
 
   figma.ui.postMessage({
     type: 'compare-results',
@@ -1657,6 +1704,20 @@ function parseNotionContent(text) {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
+
+    // "# 헤더" / "## 서브헤더" → 화면/섹션 구조 항목으로 처리
+    if (trimmed.startsWith('#')) {
+      const headerText = trimmed.replace(/^#+\s*/, '').trim();
+      if (headerText) {
+        keywords.push({
+          label: '화면/섹션',
+          text: headerText,
+          original: trimmed,
+          isStructural: true
+        });
+      }
+      continue;
+    }
 
     // "- " 또는 "• " 로 시작하는 항목 처리
     let content = trimmed.replace(/^[-•*]\s*/, '');
@@ -1709,6 +1770,26 @@ function collectTextsWithInfo(node, results, path = '') {
     const currentPath = path ? `${path} > ${node.name}` : node.name;
     for (const child of node.children) {
       collectTextsWithInfo(child, results, currentPath);
+    }
+  }
+}
+
+// Figma에서 프레임/컴포넌트 이름 수집 (화면 구조 비교용)
+function collectFrameNames(node, results, path) {
+  path = path || '';
+  const structuralTypes = ['FRAME', 'COMPONENT', 'COMPONENT_SET', 'GROUP'];
+  if (structuralTypes.indexOf(node.type) !== -1 && node.name) {
+    results.push({
+      nodeId: node.id,
+      name: node.name,
+      text: node.name,
+      path: path ? path + ' > ' + node.name : node.name
+    });
+  }
+  if ('children' in node && node.children) {
+    const currentPath = path ? path + ' > ' + node.name : node.name;
+    for (var i = 0; i < node.children.length; i++) {
+      collectFrameNames(node.children[i], results, currentPath);
     }
   }
 }
@@ -2133,6 +2214,118 @@ async function createGenericDesign(parsed, rawCode) {
   });
 }
 
+// Gemini AI 응답 JSON으로 Figma 디자인 생성
+async function createDesignFromGeminiResponse(data) {
+  figma.ui.postMessage({ type: 'code2design-status', status: 'info', message: 'Figma 프레임 생성 중...' });
+
+  try {
+    // 폰트 미리 로드
+    await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+    await figma.loadFontAsync({ family: "Inter", style: "Bold" });
+    await figma.loadFontAsync({ family: "Inter", style: "Medium" });
+
+    // 메인 프레임 생성
+    const mainFrame = figma.createFrame();
+    mainFrame.name = data.name || 'Tailwind Design';
+    mainFrame.resize(data.width || 375, data.height || 600);
+    if (data.backgroundColor) {
+      mainFrame.fills = [{ type: 'SOLID', color: hexToRgb(data.backgroundColor) }];
+    } else {
+      mainFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+    }
+
+    // 재귀 노드 생성 함수
+    async function createNode(nodeData, parentNode) {
+      var type = nodeData.type || 'frame';
+      var node;
+
+      if (type === 'text') {
+        node = figma.createText();
+        node.name = nodeData.name || 'Text';
+        try {
+          if (nodeData.fontWeight === 'Bold') {
+            await figma.loadFontAsync({ family: "Inter", style: "Bold" });
+            node.fontName = { family: "Inter", style: "Bold" };
+          } else if (nodeData.fontWeight === 'Medium') {
+            await figma.loadFontAsync({ family: "Inter", style: "Medium" });
+            node.fontName = { family: "Inter", style: "Medium" };
+          } else {
+            await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+            node.fontName = { family: "Inter", style: "Regular" };
+          }
+        } catch(e) {}
+        node.characters = nodeData.content || '';
+        node.fontSize = nodeData.fontSize || 14;
+        if (nodeData.color) {
+          node.fills = [{ type: 'SOLID', color: hexToRgb(nodeData.color) }];
+        }
+      } else if (type === 'ellipse') {
+        node = figma.createEllipse();
+        node.name = nodeData.name || 'Ellipse';
+        if (nodeData.fill) {
+          node.fills = [{ type: 'SOLID', color: hexToRgb(nodeData.fill) }];
+        }
+      } else if (type === 'rect') {
+        node = figma.createRectangle();
+        node.name = nodeData.name || 'Rectangle';
+        if (nodeData.fill) {
+          node.fills = [{ type: 'SOLID', color: hexToRgb(nodeData.fill) }];
+        }
+        if (nodeData.cornerRadius) node.cornerRadius = nodeData.cornerRadius;
+      } else {
+        // frame (기본)
+        node = figma.createFrame();
+        node.name = nodeData.name || 'Frame';
+        node.fills = nodeData.fill
+          ? [{ type: 'SOLID', color: hexToRgb(nodeData.fill) }]
+          : [];
+        if (nodeData.cornerRadius) node.cornerRadius = nodeData.cornerRadius;
+        // 자식 노드 먼저 추가
+        if (nodeData.children && nodeData.children.length) {
+          for (var i = 0; i < nodeData.children.length; i++) {
+            await createNode(nodeData.children[i], node);
+          }
+        }
+      }
+
+      // 위치 및 크기 설정
+      node.x = nodeData.x || 0;
+      node.y = nodeData.y || 0;
+      if (nodeData.width && nodeData.height) {
+        try { node.resize(nodeData.width, nodeData.height); } catch(e) {}
+      }
+
+      parentNode.appendChild(node);
+    }
+
+    // 최상위 elements 생성
+    if (data.elements && data.elements.length) {
+      for (var i = 0; i < data.elements.length; i++) {
+        await createNode(data.elements[i], mainFrame);
+      }
+    }
+
+    // 캔버스에 추가 및 뷰포트 이동
+    figma.currentPage.appendChild(mainFrame);
+    figma.currentPage.selection = [mainFrame];
+    figma.viewport.scrollAndZoomIntoView([mainFrame]);
+
+    figma.ui.postMessage({
+      type: 'code2design-status',
+      status: 'success',
+      message: '✅ Tailwind 디자인이 생성되었습니다! (' + (data.elements ? data.elements.length : 0) + '개 요소)'
+    });
+
+  } catch(e) {
+    console.error('createDesignFromGeminiResponse 오류:', e);
+    figma.ui.postMessage({
+      type: 'code2design-status',
+      status: 'error',
+      message: '디자인 생성 실패: ' + e.message
+    });
+  }
+}
+
 // 텍스트 스타일 체크 - 텍스트 스타일이 적용되지 않은 텍스트 레이어 찾기
 function checkTextStyles(selection) {
   const results = [];
@@ -2213,6 +2406,7 @@ function checkTextStyles(selection) {
 
 // HEX를 Figma RGB로 변환 (0-1 범위)
 function hexToFigmaRgb(hex) {
+  if (!hex) return null;
   hex = hex.replace('#', '');
 
   // 3자리 HEX를 6자리로 변환
@@ -2226,6 +2420,8 @@ function hexToFigmaRgb(hex) {
     alpha = parseInt(hex.slice(6, 8), 16) / 255;
     hex = hex.slice(0, 6);
   }
+
+  if (hex.length !== 6) return null;
 
   const r = parseInt(hex.slice(0, 2), 16) / 255;
   const g = parseInt(hex.slice(2, 4), 16) / 255;
@@ -2279,8 +2475,8 @@ async function createVariablesFromTokens(collectionName, tokens) {
       collection = figma.variables.createVariableCollection(collectionName);
     }
 
-    // 기본 모드 ID 가져오기
-    const modeId = collection.modes[0].id;
+    // 기본 모드 ID 가져오기 (Figma modes: { modeId, name })
+    const modeId = collection.modes[0].modeId;
 
     let createdCount = 0;
     let skippedCount = 0;
@@ -3378,22 +3574,29 @@ async function createTableVariables(collectionName, tokens) {
       collection = figma.variables.createVariableCollection(collectionName);
     }
 
-    // Light 모드 확인/생성
+    // Light 모드 확인/생성 (Figma modes 속성: { modeId, name })
     var lightMode = collection.modes.find(function(m) { return m.name === 'Light'; });
     if (!lightMode) {
       // 첫 번째 기본 모드를 Light로 이름 변경
-      collection.renameMode(collection.modes[0].id, 'Light');
+      collection.renameMode(collection.modes[0].modeId, 'Light');
       lightMode = collection.modes[0];
     }
-    var lightModeId = lightMode.id;
+    var lightModeId = lightMode.modeId;
 
     // Dark 모드 확인/생성
+    var darkModeId;
     var darkMode = collection.modes.find(function(m) { return m.name === 'Dark'; });
-    if (!darkMode) {
-      var darkModeId = collection.addMode('Dark');
-      darkMode = collection.modes.find(function(m) { return m.id === darkModeId; });
+    if (darkMode) {
+      darkModeId = darkMode.modeId;
+    } else {
+      try {
+        darkModeId = collection.addMode('Dark');
+      } catch(modeErr) {
+        // 무료 플랜: 모드 추가 불가 → Light 모드 ID 재사용
+        darkModeId = lightModeId;
+        figma.ui.postMessage({ type: 'table-variables-status', status: 'info', message: '플랜 제한: Dark 모드 없이 Light 모드만 생성됩니다...' });
+      }
     }
-    var darkModeId = darkMode.id;
 
     var created = 0, updated = 0, errors = [];
 
@@ -3449,15 +3652,3 @@ async function createTableVariables(collectionName, tokens) {
   }
 }
 
-// HEX → Figma RGB (0~1 범위)
-function hexToFigmaRgb(hex) {
-  if (!hex) return null;
-  var h = hex.replace('#', '');
-  if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
-  if (h.length !== 6) return null;
-  return {
-    r: parseInt(h.slice(0,2), 16) / 255,
-    g: parseInt(h.slice(2,4), 16) / 255,
-    b: parseInt(h.slice(4,6), 16) / 255
-  };
-}

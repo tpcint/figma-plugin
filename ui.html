@@ -74,15 +74,20 @@
     }
 
     .tab-dragging {
-      opacity: 0.5;
+      opacity: 0.4;
       pointer-events: none;
+      transform: scale(0.95);
+      transition: none;
     }
 
     .tab-placeholder {
-      flex: 0 0 auto;
-      height: 42px;
-      background: #E8E9F2;
-      border-radius: 6px;
+      flex: 0 0 2px;
+      width: 2px;
+      height: 24px;
+      background: #7C5CFC;
+      border-radius: 2px;
+      align-self: center;
+      pointer-events: none;
     }
 
     .tab.active::after {
@@ -279,6 +284,11 @@
     .status.info {
       background: #EFF6FF;
       color: #2563EB;
+    }
+
+    .status.warning {
+      background: #FFFBEB;
+      color: #D97706;
     }
 
     /* Bridge 탭 스타일 */
@@ -1213,7 +1223,7 @@
 
     .compare-textarea {
       width: 100%;
-      height: 120px;
+      height: calc(100vh - 300px);
       padding: 12px;
       border: 1px solid #D7D8E5;
       border-radius: 12px;
@@ -1230,24 +1240,21 @@
 
     .compare-source-tabs {
       display: flex;
-      gap: 8px;
+      gap: 4px;
+      flex-wrap: wrap;
       margin-bottom: 12px;
     }
 
     .compare-source-tab {
-      flex: 1;
-      padding: 10px 12px;
-      border-radius: 10px;
+      padding: 8px 16px;
+      border-radius: 20px;
       border: 1px solid #D7D8E5;
       background: #fff;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 13px;
+      font-weight: 500;
       color: #5A5A73;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
+      transition: all 0.2s;
     }
 
     .compare-source-tab:hover {
@@ -1437,6 +1444,7 @@
       <button class="tab" data-tab="code2design">Code2Design</button>
       <button class="tab" data-tab="variables">Variables</button>
       <button class="tab" data-tab="style">Checker</button>
+      <button class="tab" data-tab="compare">Notion</button>
     </div>
   </div>
 
@@ -1602,8 +1610,62 @@
   <!-- Code2Design 탭 -->
   <div class="tab-content" id="code2design-tab">
     <div class="main-content">
-      <!-- .pen 변환 카드 (맨 위) -->
+      <!-- Code → Figma Design 카드 (맨 위) -->
       <div class="card">
+        <h2 class="card-title">Code → Figma Design</h2>
+
+        <div class="code-type-tabs">
+          <button class="code-type-tab active" data-codetype="react" onclick="selectCodeType(this, 'react')">
+            ⚛️ React
+          </button>
+          <button class="code-type-tab" data-codetype="html" onclick="selectCodeType(this, 'html')">
+            🌐 HTML/CSS
+          </button>
+          <button class="code-type-tab" data-codetype="tailwind" onclick="selectCodeType(this, 'tailwind')">
+            🎨 Tailwind
+          </button>
+        </div>
+
+        <!-- Tailwind 탭 안내 (Gemini에게 직접 요청 후 붙여넣기) -->
+        <div id="geminiHintSection" style="display:none; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:10px 12px; margin-bottom:12px;">
+          <div style="font-size:11px; color:#166534; font-weight:600; margin-bottom:4px;">💡 Gemini에게 아래 프롬프트로 요청하세요</div>
+          <div style="font-size:11px; color:#15803D; line-height:1.5;">아래 Tailwind 코드를 Figma JSON으로 변환해줘.<br>
+          형식: {"name":"...","width":375,"height":600,"backgroundColor":"#fff","elements":[{"type":"frame","name":"...","x":0,"y":0,"width":375,"height":100,"fill":"#6366F1","cornerRadius":12,"children":[{"type":"text","name":"...","content":"텍스트","x":16,"y":12,"width":200,"height":24,"fontSize":16,"fontWeight":"Bold","color":"#FFFFFF"}]}]}<br>
+          JSON만 응답해줘.</div>
+        </div>
+
+        <div class="code-input-section">
+          <label class="input-label" id="codeInputLabel">React/HTML 코드를 붙여넣으세요</label>
+          <textarea class="code-textarea" id="codeInput" placeholder="// React 컴포넌트 또는 HTML 코드를 붙여넣으세요
+// CSS 스타일도 함께 붙여넣으면 자동으로 파싱됩니다
+
+export default function Component() {
+  return (
+    <div style={{ padding: 20 }}>
+      <h1>Hello World</h1>
+    </div>
+  );
+}"></textarea>
+        </div>
+
+        <div class="button-group">
+          <button class="btn btn-primary" id="generateDesignBtn" onclick="generateDesign()">
+            <span class="btn-text">🎨 Figma 디자인 생성</span>
+            <span class="btn-loading">
+              <span class="btn-spinner"></span>
+              생성 중...
+            </span>
+          </button>
+        </div>
+
+        <div class="code-preview" id="codePreview" style="display: none;">
+          <div class="code-preview-title">파싱 결과</div>
+          <div class="code-preview-info" id="codePreviewInfo"></div>
+        </div>
+      </div>
+
+      <!-- .pen 변환 카드 -->
+      <div class="card" style="margin-top: -6px;">
         <h2 class="card-title">.pen → Figma Frame</h2>
 
         <!-- 파일 선택 UI -->
@@ -1663,49 +1725,6 @@
         </div>
 
         <div class="status" id="penConvertStatus"></div>
-      </div>
-
-      <!-- Code → Figma Design 카드 -->
-      <div class="card" style="margin-top: -6px;">
-        <h2 class="card-title">Code → Figma Design</h2>
-
-        <div class="code-type-tabs">
-          <button class="code-type-tab active" data-codetype="react" onclick="selectCodeType(this, 'react')">
-            ⚛️ React
-          </button>
-          <button class="code-type-tab" data-codetype="html" onclick="selectCodeType(this, 'html')">
-            🌐 HTML/CSS
-          </button>
-        </div>
-
-        <div class="code-input-section">
-          <label class="input-label">React/HTML 코드를 붙여넣으세요</label>
-          <textarea class="code-textarea" id="codeInput" placeholder="// React 컴포넌트 또는 HTML 코드를 붙여넣으세요
-// CSS 스타일도 함께 붙여넣으면 자동으로 파싱됩니다
-
-export default function Component() {
-  return (
-    <div style={{ padding: 20 }}>
-      <h1>Hello World</h1>
-    </div>
-  );
-}"></textarea>
-        </div>
-
-        <div class="button-group">
-          <button class="btn btn-primary" id="generateDesignBtn" onclick="generateDesign()">
-            <span class="btn-text">🎨 Figma 디자인 생성</span>
-            <span class="btn-loading">
-              <span class="btn-spinner"></span>
-              생성 중...
-            </span>
-          </button>
-        </div>
-
-        <div class="code-preview" id="codePreview" style="display: none;">
-          <div class="code-preview-title">파싱 결과</div>
-          <div class="code-preview-info" id="codePreviewInfo"></div>
-        </div>
       </div>
 
       <div class="status" id="code2designStatus"></div>
@@ -1794,8 +1813,19 @@ export default function Component() {
         </p>
 
         <div class="code-input-section">
-          <label class="input-label">Collection 이름</label>
-          <input type="text" class="input-text" id="tableCollectionName" placeholder="Color Tokens" value="Color Tokens" style="margin-bottom:12px;">
+          <label class="input-label" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Collection</span>
+            <button onclick="loadTableCollections()" id="refreshCollectionsBtn"
+              style="background:none;border:none;cursor:pointer;font-size:13px;color:#838499;padding:0;line-height:1;"
+              title="컬렉션 목록 새로고침">🔄 새로고침</button>
+          </label>
+          <select id="tableCollectionSelect"
+            style="width:100%;padding:8px 12px;border:1px solid #D7D8E5;border-radius:10px;font-size:13px;background:#fff;color:#110F1A;margin-bottom:6px;cursor:pointer;appearance:auto;"
+            onchange="onCollectionSelectChange()">
+            <option value="__loading">불러오는 중...</option>
+          </select>
+          <input type="text" id="tableNewCollectionName" class="input-text"
+            placeholder="새 Collection 이름 입력" style="display:none;margin-bottom:6px;">
 
           <label class="input-label">표 붙여넣기 (탭/공백 구분)</label>
           <textarea class="code-textarea" id="tableTokenInput" style="min-height:140px;" placeholder="Level	Light (Hex)	Dark (Hex)
@@ -1875,6 +1905,98 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     </div>
   </div>
 
+  <!-- Compare 탭 -->
+  <div class="tab-content" id="compare-tab">
+    <div class="main-content">
+      <div class="card">
+        <!-- 소스 탭 전환 -->
+        <div class="compare-source-tabs">
+          <button class="compare-source-tab active" data-source="paste">텍스트 붙여넣기</button>
+          <button class="compare-source-tab" data-source="notion" style="display:none">Notion URL</button>
+        </div>
+
+        <!-- 텍스트 붙여넣기 영역 -->
+        <div id="pasteInputSection" class="compare-input-section">
+          <textarea id="notionContent" class="compare-textarea"
+            placeholder="마크다운 형식으로 붙여넣기 하세요.
+
+# 홈 화면          ← # 화면/섹션 이름
+제목: 마루에몽      ← 레이블: 텍스트
+버튼: 팔로우"></textarea>
+          <div style="margin-top:10px; display:flex; flex-direction:column; gap:4px;">
+            <p style="font-size:12px; font-weight:600; color:#110F1A; margin:0;">사용 방법</p>
+            <p style="font-size:11px; color:#5A5A73; margin:0;">① Figma에서 비교할 프레임을 선택하세요</p>
+            <p style="font-size:11px; color:#5A5A73; margin:0;">② Notion 기획서를 마크다운 형식으로 붙여넣으세요</p>
+            <p style="font-size:11px; color:#5A5A73; margin:0;">③ 비교하기 버튼을 누르면 일치·불일치·누락 항목을 확인할 수 있습니다</p>
+            <p style="font-size:11px; color:#838499; margin:4px 0 0 0;">💡 Notion 일반 복사 시 # 기호가 빠집니다.<br>Notion → 내보내기 → Markdown 을 사용하거나 # 기호를 직접 입력하세요.</p>
+          </div>
+        </div>
+
+        <!-- Notion URL 영역 (Integration Token 방식) -->
+        <div id="notionUrlSection" class="compare-input-section" style="display:none">
+
+          <!-- Integration Token 입력 -->
+          <div style="margin-bottom:8px;">
+            <p style="font-size:12px; font-weight:600; color:#110F1A; margin:0 0 6px 0;">Integration Token</p>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <input id="notionToken" type="password" class="notion-url-input"
+                placeholder="secret_xxxx..." style="margin-bottom:0; flex:1;">
+              <button id="saveTokenBtn" style="height:44px; padding:0 14px; border:1px solid #D7D8E5; border-radius:12px; font-size:13px; background:#fff; cursor:pointer; color:#5A5A73; white-space:nowrap; flex-shrink:0;">저장</button>
+            </div>
+          </div>
+
+          <!-- Page URL 입력 -->
+          <div style="margin-bottom:10px;">
+            <p style="font-size:12px; font-weight:600; color:#110F1A; margin:0 0 6px 0;">Notion 페이지 URL</p>
+            <input id="notionPageId" class="notion-url-input"
+              placeholder="https://notion.so/..." style="margin-bottom:0;">
+          </div>
+
+          <!-- 사용 방법 안내 -->
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <p style="font-size:12px; font-weight:600; color:#110F1A; margin:0;">사용 방법</p>
+            <p style="font-size:11px; color:#5A5A73; margin:0;">① Notion Settings → Connections → Develop or manage integrations</p>
+            <p style="font-size:11px; color:#5A5A73; margin:0;">② New integration 생성 → Internal Integration Secret 복사</p>
+            <p style="font-size:11px; color:#5A5A73; margin:0;">③ 연결할 Notion 페이지 우측 상단 ··· → Connections → integration 추가</p>
+            <p style="font-size:11px; color:#5A5A73; margin:0;">④ Token 저장 후 페이지 URL 입력 → 비교하기 클릭</p>
+            <p style="font-size:11px; color:#838499; margin:4px 0 0 0;">💡 Token은 브라우저 로컬에만 저장되며 외부로 전송되지 않습니다.</p>
+          </div>
+        </div>
+
+        <!-- 비교 버튼 -->
+        <button id="compareBtn" class="btn btn-primary" style="margin-top:8px">
+          <span class="btn-text">🔍 비교하기</span>
+          <span class="btn-loading">
+            <span class="btn-spinner"></span>
+            비교 중...
+          </span>
+        </button>
+
+        <!-- 상태 메시지 -->
+        <div id="compareStatus" class="status"></div>
+      </div>
+
+      <!-- 요약 바 -->
+      <div id="compareSummary" class="compare-summary-bar" style="display:none">
+        <div class="compare-stat">
+          <div class="compare-stat-dot match"></div>
+          <span id="matchCount">0</span> 일치
+        </div>
+        <div class="compare-stat">
+          <div class="compare-stat-dot mismatch"></div>
+          <span id="mismatchCount">0</span> 불일치
+        </div>
+        <div class="compare-stat">
+          <div class="compare-stat-dot missing"></div>
+          <span id="missingCount">0</span> 누락
+        </div>
+      </div>
+
+      <!-- 결과 목록 -->
+      <div id="compareResults" class="compare-results"></div>
+    </div>
+  </div>
+
 
   </div><!-- content-wrapper 닫기 -->
 
@@ -1887,22 +2009,22 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     // ===== 탭 순서 변경 + 전환 =====
     const tabsScroller = document.getElementById('tabsScroller');
 
-    // 저장된 순서 복원
-    (function restoreTabOrder() {
-      try {
-        var saved = localStorage.getItem('tabOrder');
-        if (!saved) return;
-        var order = JSON.parse(saved);
-        order.forEach(function(tabId) {
-          var el = tabsScroller.querySelector('[data-tab="' + tabId + '"]');
-          if (el) tabsScroller.appendChild(el);
-        });
-      } catch(e) {}
-    })();
+    // 탭 순서 복원 (code.js → clientStorage에서 전달받아 적용)
+    function applyTabOrder(order) {
+      if (!order || !order.length) return;
+      order.forEach(function(tabId) {
+        var el = tabsScroller.querySelector('[data-tab="' + tabId + '"]');
+        if (el) tabsScroller.appendChild(el);
+      });
+      // 재정렬 후 첫 번째 탭을 active로 전환
+      var firstTab = tabsScroller.querySelector('.tab');
+      if (firstTab) switchTab(firstTab);
+    }
 
+    // 탭 순서 저장 (code.js → figma.clientStorage에 위임)
     function saveTabOrder() {
       var order = Array.from(tabsScroller.querySelectorAll('.tab')).map(function(t) { return t.dataset.tab; });
-      try { localStorage.setItem('tabOrder', JSON.stringify(order)); } catch(e) {}
+      parent.postMessage({ pluginMessage: { type: 'save-tab-order', order: order } }, '*');
     }
 
     function switchTab(tab) {
@@ -1910,6 +2032,10 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
       tab.classList.add('active');
       document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+      // Variables 탭 진입 시 컬렉션 목록 자동 로드
+      if (tab.dataset.tab === 'variables') {
+        loadTableCollections();
+      }
     }
 
     // 드래그로 탭 순서 변경
@@ -1923,13 +2049,14 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       dragStartX = e.clientX;
       dragMoved = false;
 
-      // placeholder: 드래그 중 빈 자리 표시
+      // placeholder: 드롭 위치를 가리키는 얇은 라인
       placeholder = document.createElement('div');
       placeholder.className = 'tab-placeholder';
-      placeholder.style.width = dragTab.offsetWidth + 'px';
 
       document.addEventListener('mousemove', onTabMouseMove);
       document.addEventListener('mouseup', onTabMouseUp);
+      // 브라우저 밖에서 mouseup 해도 정리되도록
+      window.addEventListener('blur', onTabMouseUp);
     }
 
     function onTabMouseMove(e) {
@@ -1973,6 +2100,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     function onTabMouseUp(e) {
       document.removeEventListener('mousemove', onTabMouseMove);
       document.removeEventListener('mouseup', onTabMouseUp);
+      window.removeEventListener('blur', onTabMouseUp);
 
       if (!dragTab) return;
 
@@ -1988,7 +2116,8 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         if (placeholder && placeholder.parentNode) placeholder.remove();
         if (dragTab) dragTab.classList.remove('tab-dragging');
         tabsScroller.style.cursor = '';
-        switchTab(dragTab);
+        // 클릭으로 판정된 경우만 탭 전환
+        if (!dragMoved) switchTab(dragTab);
       }
 
       dragTab = null;
@@ -2098,6 +2227,11 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       const msg = event.data.pluginMessage;
       if (!msg) return;  // 메시지가 없으면 무시
 
+      // 저장된 탭 순서 복원 (플러그인 열릴 때 code.js가 전송)
+      if (msg.type === 'restore-tab-order') {
+        applyTabOrder(msg.order);
+      }
+
       if (msg.type === 'status') {
         showBridgeStatus(msg.message, msg.status);
         // 성공 또는 에러 시 로딩 해제
@@ -2192,6 +2326,34 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         if (btn) btn.classList.remove('loading');
       }
 
+      // 컬렉션 목록 수신
+      if (msg.type === 'variable-collections') {
+        var sel = document.getElementById('tableCollectionSelect');
+        if (!sel) return;
+        var prev = sel.value; // 이전 선택값 유지 시도
+        sel.innerHTML = '';
+        if (!msg.collections || msg.collections.length === 0) {
+          sel.innerHTML = '<option value="__new">➕ 새 컬렉션 만들기</option>';
+        } else {
+          msg.collections.forEach(function(c) {
+            var opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            sel.appendChild(opt);
+          });
+          var newOpt = document.createElement('option');
+          newOpt.value = '__new';
+          newOpt.textContent = '➕ 새 컬렉션 만들기...';
+          sel.appendChild(newOpt);
+          // 이전에 선택했던 컬렉션이 있으면 복원
+          if (prev && prev !== '__loading') {
+            sel.value = prev;
+            if (sel.value !== prev) sel.value = sel.options[0].value;
+          }
+        }
+        onCollectionSelectChange();
+      }
+
       // Variables 관련 메시지
       if (msg.type === 'variables-status') {
         showVariablesStatus(msg.message, msg.status);
@@ -2220,8 +2382,21 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       }
 
       // Compare 관련 메시지
-      if (msg.type === 'compare-status') showCompareStatus(msg.message, msg.status);
+      if (msg.type === 'compare-status') {
+        document.getElementById('compareBtn').classList.remove('loading');
+        showCompareStatus(msg.message, msg.status);
+        // 에러 시 results 영역도 정리
+        if (msg.status === 'error') {
+          document.getElementById('compareResults').innerHTML = `
+            <div class="checker-empty">
+              <div class="checker-empty-icon">⚠️</div>
+              <div class="checker-empty-text">${msg.message}</div>
+            </div>
+          `;
+        }
+      }
       if (msg.type === 'compare-results') {
+        document.getElementById('compareBtn').classList.remove('loading');
         renderCompareResults(msg.results);
         const mismatchCount = msg.results.filter(r => r.status === 'mismatch').length;
         const missingCount = msg.results.filter(r => r.status === 'missing').length;
@@ -2563,6 +2738,29 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       };
     });
 
+    // Token 로컬 저장/불러오기 (localStorage가 제한된 환경 대비 try-catch)
+    try {
+      const savedNotionToken = localStorage.getItem('notionToken');
+      if (savedNotionToken) {
+        document.getElementById('notionToken').value = savedNotionToken;
+      }
+    } catch(e) {}
+    document.getElementById('saveTokenBtn').onclick = () => {
+      const token = document.getElementById('notionToken').value.trim();
+      if (token) {
+        try { localStorage.setItem('notionToken', token); } catch(e) {}
+        const btn = document.getElementById('saveTokenBtn');
+        btn.textContent = '저장됨 ✓';
+        btn.style.color = '#059669';
+        btn.style.borderColor = '#059669';
+        setTimeout(() => {
+          btn.textContent = '저장';
+          btn.style.color = '#5A5A73';
+          btn.style.borderColor = '#D7D8E5';
+        }, 2000);
+      }
+    };
+
     function showCompareStatus(message, type) {
       compareStatus.textContent = message;
       compareStatus.className = 'status show ' + type;
@@ -2575,14 +2773,18 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       if (compareSource === 'paste') {
         notionText = document.getElementById('notionContent').value.trim();
       } else {
-        // Notion API 연동 (추후 구현)
-        const pageId = document.getElementById('notionPageId').value.trim();
-        if (!pageId) {
-          showCompareStatus('Notion 페이지 ID를 입력해주세요', 'error');
+        const pageUrl = document.getElementById('notionPageId').value.trim();
+        const token = document.getElementById('notionToken').value.trim();
+        if (!pageUrl) {
+          showCompareStatus('Notion 페이지 URL을 입력해주세요', 'error');
           return;
         }
-        // Notion API로 데이터 가져오기
-        fetchNotionPage(pageId);
+        if (!token) {
+          showCompareStatus('Integration Token을 입력해주세요', 'error');
+          return;
+        }
+        document.getElementById('compareBtn').classList.add('loading');
+        fetchNotionPage(pageUrl, token);
         return;
       }
 
@@ -2591,6 +2793,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         return;
       }
 
+      document.getElementById('compareBtn').classList.add('loading');
       showCompareStatus('비교 중...', 'info');
       compareResults.innerHTML = `
         <div class="checker-loading">
@@ -2605,12 +2808,102 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       }, '*');
     };
 
-    // Notion API로 페이지 가져오기
-    async function fetchNotionPage(pageId) {
-      showCompareStatus('Notion 페이지 로딩 중...', 'info');
+    // Notion URL → UUID 추출
+    function extractPageId(url) {
+      // 32자 hex 추출 (하이픈 포함 UUID도 처리)
+      const uuidMatch = url.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (uuidMatch) return uuidMatch[1];
+      const hexMatch = url.match(/([0-9a-f]{32})(?:[?#/]|$)/i);
+      if (!hexMatch) return null;
+      const h = hexMatch[1];
+      return [h.slice(0,8), h.slice(8,12), h.slice(12,16), h.slice(16,20), h.slice(20)].join('-');
+    }
 
-      // Notion API는 서버사이드에서만 가능하므로, 현재는 안내 메시지 표시
-      showCompareStatus('Notion API 연동은 준비 중입니다. 직접 입력을 사용해주세요.', 'info');
+    // Notion 블록 → 마크다운 텍스트 변환
+    function notionBlocksToText(blocks) {
+      return blocks.map(block => {
+        const type = block.type;
+        const content = block[type];
+        if (!content) return '';
+        const richText = content.rich_text;
+        if (!richText) return '';
+        const text = richText.map(t => t.plain_text).join('');
+        if (!text.trim()) return '';
+        if (type === 'heading_1') return '# ' + text;
+        if (type === 'heading_2') return '## ' + text;
+        if (type === 'heading_3') return '### ' + text;
+        if (type === 'bulleted_list_item') return '- ' + text;
+        if (type === 'numbered_list_item') return text;
+        if (type === 'to_do') return (content.checked ? '[x] ' : '[ ] ') + text;
+        return text;
+      }).filter(Boolean).join('\n');
+    }
+
+    // Notion API로 페이지 가져오기
+    async function fetchNotionPage(pageUrl, token) {
+      const pageId = extractPageId(pageUrl);
+      if (!pageId) {
+        showCompareStatus('올바른 Notion 페이지 URL을 입력해주세요', 'error');
+        document.getElementById('compareBtn').classList.remove('loading');
+        return;
+      }
+
+      showCompareStatus('Notion 페이지 불러오는 중...', 'info');
+      compareResults.innerHTML = `
+        <div class="checker-loading">
+          <div class="checker-spinner"></div>
+          <div>Notion 페이지 로딩 중...</div>
+        </div>
+      `;
+
+      try {
+        const res = await fetch(
+          'https://api.notion.com/v1/blocks/' + pageId + '/children?page_size=100',
+          {
+            headers: {
+              'Authorization': 'Bearer ' + token,
+              'Notion-Version': '2022-06-28',
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (!res.ok) {
+          let errMsg = 'HTTP ' + res.status;
+          try { const err = await res.json(); errMsg = err.message || errMsg; } catch(e) {}
+          showCompareStatus('Notion API 오류: ' + errMsg, 'error');
+          document.getElementById('compareBtn').classList.remove('loading');
+          compareResults.innerHTML = '';
+          return;
+        }
+
+        const data = await res.json();
+        const notionText = notionBlocksToText(data.results || []);
+
+        if (!notionText.trim()) {
+          showCompareStatus('페이지 내용이 비어있거나 지원하지 않는 블록 형식입니다', 'error');
+          document.getElementById('compareBtn').classList.remove('loading');
+          compareResults.innerHTML = '';
+          return;
+        }
+
+        showCompareStatus('비교 중...', 'info');
+        compareResults.innerHTML = `
+          <div class="checker-loading">
+            <div class="checker-spinner"></div>
+            <div>Figma 텍스트와 비교 중...</div>
+          </div>
+        `;
+
+        parent.postMessage({
+          pluginMessage: { type: 'compare-with-notion', notionText: notionText }
+        }, '*');
+
+      } catch (e) {
+        showCompareStatus('네트워크 오류: ' + e.message, 'error');
+        document.getElementById('compareBtn').classList.remove('loading');
+        compareResults.innerHTML = '';
+      }
     }
 
     // 비교 결과 렌더링
@@ -2686,6 +2979,23 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       btn.classList.add('active');
       currentCodeType = codeType;
       console.log('코드 타입 변경:', currentCodeType);
+
+      // Tailwind 탭이면 안내 섹션 표시
+      const geminiHint = document.getElementById('geminiHintSection');
+      if (geminiHint) {
+        geminiHint.style.display = codeType === 'tailwind' ? 'block' : 'none';
+      }
+
+      // label / placeholder 업데이트
+      const label = document.getElementById('codeInputLabel');
+      const textarea = document.getElementById('codeInput');
+      if (codeType === 'tailwind') {
+        if (label) label.textContent = 'Gemini가 생성한 JSON을 붙여넣으세요';
+        if (textarea) textarea.placeholder = '// Gemini에게 요청해서 받은 JSON을 붙여넣으세요\n\n{\n  "name": "My Component",\n  "width": 375,\n  "height": 600,\n  "backgroundColor": "#FFFFFF",\n  "elements": [\n    {\n      "type": "frame",\n      "name": "Card",\n      "x": 16, "y": 16, "width": 343, "height": 200,\n      "fill": "#6366F1",\n      "cornerRadius": 12,\n      "children": [\n        {\n          "type": "text",\n          "name": "Title",\n          "content": "안녕하세요",\n          "x": 20, "y": 20, "width": 200, "height": 30,\n          "fontSize": 24, "fontWeight": "Bold", "color": "#FFFFFF"\n        }\n      ]\n    }\n  ]\n}';
+      } else {
+        if (label) label.textContent = 'React/HTML 코드를 붙여넣으세요';
+        if (textarea) textarea.placeholder = '// React 컴포넌트 또는 HTML 코드를 붙여넣으세요\n// CSS 스타일도 함께 붙여넣으면 자동으로 파싱됩니다\n\nexport default function Component() {\n  return (\n    <div style={{ padding: 20 }}>\n      <h1>Hello World</h1>\n    </div>\n  );\n}';
+      }
     }
 
     // React 코드 파싱
@@ -2773,6 +3083,30 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         showCode2DesignStatus('코드를 입력해주세요', 'error');
         return;
       }
+
+      // ─── Tailwind 분기: Gemini JSON 직접 파싱 ───
+      if (currentCodeType === 'tailwind') {
+        let geminiResult;
+        try {
+          // 코드 블록 마커(```json ... ```) 제거 후 JSON 파싱
+          const jsonText = code.replace(/```json\n?|\n?```/g, '').trim();
+          geminiResult = JSON.parse(jsonText);
+        } catch(e) {
+          showCode2DesignStatus('JSON 파싱 실패: ' + e.message + '\n올바른 JSON 형식을 붙여넣어주세요.', 'error');
+          return;
+        }
+
+        if (btn) btn.classList.add('loading');
+        showCode2DesignStatus('Figma 프레임 생성 중...', 'info');
+
+        // code.js에 Figma 생성 요청
+        parent.postMessage({
+          pluginMessage: { type: 'generate-from-tailwind', geminiResult: geminiResult }
+        }, '*');
+
+        return; // 기존 parseReactCode 흐름 건너뜀
+      }
+      // ──────────────────────────────────────
 
       // 로딩 시작
       console.log('로딩 시작');
@@ -3131,12 +3465,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       var el = document.getElementById('tableVarsStatus');
       if (!el) return;
       el.textContent = msg;
-      // 기존 status 클래스 시스템에 맞게 매핑
-      var cls = 'status';
-      if (type === 'success') cls += ' success';
-      else if (type === 'error') cls += ' error';
-      else if (type === 'info') cls += ' info';
-      el.className = cls;
+      el.className = 'status show ' + (type || '');
     }
 
     function previewTableTokens() {
@@ -3170,6 +3499,22 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       showTableVarsStatus(tokens.length + '개 토큰 인식됨 ✅', 'success');
     }
 
+    // 컬렉션 목록 불러오기
+    function loadTableCollections() {
+      var sel = document.getElementById('tableCollectionSelect');
+      if (sel) sel.innerHTML = '<option value="__loading">불러오는 중...</option>';
+      parent.postMessage({ pluginMessage: { type: 'get-variable-collections' } }, '*');
+    }
+
+    // 선택값 변경 시 "새 컬렉션" 입력 필드 토글
+    function onCollectionSelectChange() {
+      var sel = document.getElementById('tableCollectionSelect');
+      var newInput = document.getElementById('tableNewCollectionName');
+      if (!sel || !newInput) return;
+      newInput.style.display = (sel.value === '__new') ? 'block' : 'none';
+      if (sel.value === '__new') newInput.focus();
+    }
+
     function createTableVariables() {
       var input = document.getElementById('tableTokenInput').value;
       if (!input.trim()) { showTableVarsStatus('표를 붙여넣어주세요', 'error'); return; }
@@ -3180,7 +3525,19 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         return;
       }
 
-      var collectionName = document.getElementById('tableCollectionName').value.trim() || 'Color Tokens';
+      // 컬렉션 이름 결정
+      var sel = document.getElementById('tableCollectionSelect');
+      var collectionName;
+      if (!sel || sel.value === '__loading') {
+        showTableVarsStatus('🔄 새로고침을 눌러 컬렉션 목록을 불러오세요', 'error');
+        return;
+      } else if (sel.value === '__new') {
+        collectionName = (document.getElementById('tableNewCollectionName').value || '').trim();
+        if (!collectionName) { showTableVarsStatus('새 컬렉션 이름을 입력해주세요', 'error'); return; }
+      } else {
+        collectionName = sel.value;
+      }
+
       var btn = document.getElementById('createTableVarsBtn');
       btn.classList.add('loading');
       showTableVarsStatus(tokens.length + '개 베리어블 생성 중...', 'info');
