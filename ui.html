@@ -2227,39 +2227,54 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         const response = await fetch(url);
         const text = await response.text();
 
-        const jsonString = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);/);
-        if (!jsonString || !jsonString[1]) {
-          console.error(`${sheetName} 시트 응답 파싱 실패`);
+        // gviz 응답 파싱 (greedy 방식 - 긴 응답에서 lazy regex 오작동 방지)
+        const startIdx = text.indexOf('(');
+        const endIdx = text.lastIndexOf(')');
+        if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+          console.error(`${sheetName} 시트 응답 파싱 실패 (괄호 없음)`);
+          return [];
+        }
+        const jsonStr = text.substring(startIdx + 1, endIdx);
+
+        let json;
+        try {
+          json = JSON.parse(jsonStr);
+        } catch (e) {
+          console.error(`${sheetName} JSON 파싱 실패:`, e.message, jsonStr.substring(0, 100));
           return [];
         }
 
-        const json = JSON.parse(jsonString[1]);
         const table = json.table;
         const result = [];
 
-        const headers = table.cols.map(col => col.label || '');
+        let headers = table.cols.map(col => col.label || '');
         console.log(`[Sheet ${sheetName}] 컬럼 헤더:`, headers);
         console.log(`[Sheet ${sheetName}] 행 수:`, table.rows ? table.rows.length : 0);
+
+        // Excel 파일: 헤더가 모두 빈 문자열이면 첫 번째 행을 헤더로 사용
+        const allEmpty = headers.every(h => !h);
+        let dataStartRow = 0;
+        if (allEmpty && table.rows && table.rows.length > 0) {
+          console.log(`[Sheet ${sheetName}] 헤더 비어있음 → 첫 번째 행을 헤더로 사용`);
+          const firstRow = table.rows[0];
+          headers = firstRow.c.map(cell => (cell && cell.v) ? String(cell.v) : '');
+          dataStartRow = 1;
+          console.log(`[Sheet ${sheetName}] 추출된 헤더:`, headers);
+        }
 
         headers.forEach((header, colIdx) => {
           if (!header) return;
 
           const values = [];
-          table.rows.forEach(row => {
-            const cell = row.c[colIdx];
+          for (let rowIdx = dataStartRow; rowIdx < (table.rows || []).length; rowIdx++) {
+            const cell = table.rows[rowIdx].c[colIdx];
             if (cell && cell.v) {
               values.push(String(cell.v));
             }
-          });
+          }
 
-          // Avatar Image 컬럼 디버깅
           if (header.toLowerCase().includes('avatar')) {
-            console.log(`[Sheet ${sheetName}] Avatar 컬럼 발견: "${header}", values(${values.length}):`, values.slice(0, 3));
-            // cell 상세 디버깅
-            if (table.rows.length > 0) {
-              const firstCell = table.rows[0].c[colIdx];
-              console.log(`[Sheet ${sheetName}] Avatar 첫 번째 셀 raw:`, JSON.stringify(firstCell));
-            }
+            console.log(`[Sheet ${sheetName}] Avatar 컬럼: "${header}", values(${values.length}):`, values.slice(0, 2));
           }
 
           if (values.length > 0) {
@@ -2267,7 +2282,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
           }
         });
 
-        console.log(`[Sheet ${sheetName}] 로드 결과:`, result.map(f => `${f.name}(${f.values.length})`).join(', '));
+        console.log(`[Sheet ${sheetName}] 결과:`, result.map(f => `${f.name}(${f.values.length})`).join(', '));
         return result;
       } catch (error) {
         console.error(`${sheetName} 시트 로드 실패:`, error);
