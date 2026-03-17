@@ -2153,7 +2153,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     // ===== Data Fill 탭 =====
     // Google Sheets 설정
     const SHEET_ID = '1D5471pDbLadzEelXTr7P0qwL_BK-ClOQ';
-    const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
+    const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
 
     // 기본 더미 데이터 (Google Sheets 로드 실패 시 사용)
     // 시트 구조: 각 열이 필드명, 각 행이 데이터
@@ -2223,9 +2223,14 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     // Google Sheets에서 특정 시트 데이터 불러오기
     async function loadSheetData(sheetName) {
       try {
-        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+        const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`;
+        // CORS 우회: 로컬 프록시 경유
+        const url = `http://localhost:7777/proxy-image?url=${encodeURIComponent(gvizUrl)}`;
+        console.log(`[Sheet ${sheetName}] fetch URL (proxy):`, url);
         const response = await fetch(url);
+        console.log(`[Sheet ${sheetName}] fetch status:`, response.status, response.ok);
         const text = await response.text();
+        console.log(`[Sheet ${sheetName}] 응답 길이:`, text.length, '앞부분:', text.substring(0, 100));
 
         // gviz 응답 파싱 (greedy 방식 - 긴 응답에서 lazy regex 오작동 방지)
         const startIdx = text.indexOf('(');
