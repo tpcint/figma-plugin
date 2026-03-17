@@ -1055,12 +1055,12 @@ async function randomFillData(category, data, avatarImageData) {
     };
   }
 
-  // Avatar 필드 확인
-  const avatarField = fieldMap['avatar'];
+  // Avatar Image 필드 확인
+  const avatarField = fieldMap['avatar image'];
   if (avatarField) {
-    _avatarDebugLog.push(`fieldMap에 avatar 있음 (isImage=${avatarField.isImage}, values=${avatarField.values ? avatarField.values.length : 0}개)`);
+    _avatarDebugLog.push(`fieldMap에 avatar image 있음 (isImage=${avatarField.isImage}, values=${avatarField.values ? avatarField.values.length : 0}개)`);
   } else {
-    _avatarDebugLog.push('fieldMap에 avatar 없음!');
+    _avatarDebugLog.push('fieldMap에 avatar image 없음!');
   }
   _avatarDebugLog.push(`fieldMap 키: ${Object.keys(fieldMap).join(', ')}`);
 

@@ -2149,7 +2149,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
           '@maruemong', '@som2', '@soi_official', '@sumin_mouse', '@hayang_ha',
           '@yang2', '@miko_heart', '@kkongju', '@mana_official', '@judy_pig', '@moeilin'
         ] },
-        { name: 'Avatar', desc: '프로필 이미지', values: [], isImage: true, imageType: 'profile' },
+        { name: 'Avatar Image', desc: '프로필 이미지', values: [], isImage: true, imageType: 'profile' },
         { name: 'FollowersText', desc: '팔로워 수', values: [
           '17.8K', '6.8K', '6.8K', '104.6K', '7.8K', '15.2K', '23.1K', '8.9K', '12.4K', '5.6K',
           '45.3K', '18.7K', '9.2K', '11.5K', '7.3K', '4.8K', '22.1K', '6.1K', '8.4K', '13.9K', '257K'
@@ -2182,7 +2182,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
           '@tanaka_yuki', '@shooting_star', '@lucky_clover', '@moonlight_fairy', '@wang_xiaoli', '@lovely_one',
           '@dreamland', '@happy_virus', '@suzuki_hana', '@starlight_garden', '@sweet_memory', '@infinite_challenge', '@heart_bbyong'
         ] },
-        { name: 'Avatar', desc: '프로필 이미지', values: [], isImage: true, imageType: 'profile' },
+        { name: 'Avatar Image', desc: '프로필 이미지', values: [], isImage: true, imageType: 'profile' },
         { name: 'Comment', desc: '댓글', values: [
           '생축🎉', '언니 생일 축하해🎂', 'お誕生日おめでとうございます🎉', '다리 진짜 예뻐요😍', '최고의 팬이에요💕',
           '応援してます！', '멤버십 가입했어요!', '오늘도 예쁘네요✨', '항상 응원합니다💪', '사랑해요❤️',
@@ -2268,17 +2268,17 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       const sheetsData = await loadGoogleSheetsData();
 
       // Avatar 기본값 (시트 교체 후 복원용)
-      const defaultAvatar = { name: 'Avatar', desc: '프로필 이미지', values: [], isImage: true, imageType: 'profile' };
+      const defaultAvatar = { name: 'Avatar Image', desc: '프로필 이미지', values: [], isImage: true, imageType: 'profile' };
 
       function mergeAvatarField(fields) {
-        const hasAvatar = fields.some(f => f.name === 'Avatar');
+        const hasAvatar = fields.some(f => f.name === 'Avatar Image');
         if (!hasAvatar) {
           // Name 다음에 삽입
           const nameIdx = fields.findIndex(f => f.name === 'Name');
           fields.splice(nameIdx >= 0 ? nameIdx + 1 : fields.length, 0, { ...defaultAvatar });
         } else {
           // Avatar가 있더라도 isImage 속성 보장
-          const avatarField = fields.find(f => f.name === 'Avatar');
+          const avatarField = fields.find(f => f.name === 'Avatar Image');
           avatarField.isImage = true;
           avatarField.imageType = 'profile';
         }
@@ -2436,7 +2436,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
     // Avatar 이미지 데이터를 미리 가져오기 (ui.html에서 fetch → code.js로 바이너리 전달)
     async function prefetchAvatarImages(data) {
-      const avatarField = data.find(f => f.isImage && f.name === 'Avatar');
+      const avatarField = data.find(f => f.isImage && f.name === 'Avatar Image');
       if (!avatarField) return {};
 
       const imageDataMap = {};
