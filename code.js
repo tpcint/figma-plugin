@@ -144,7 +144,7 @@ figma.ui.onmessage = async (msg) => {
 
   // 랜덤 채우기
   if (msg.type === 'random-fill') {
-    await randomFillData(msg.category, msg.data, msg.avatarImageData);
+    await randomFillData(msg.category, msg.data);
   }
 
   // 이미지 채우기
@@ -1024,12 +1024,9 @@ async function applyDummyData(value) {
 // 순서대로 채우기 - 레이어 이름과 데이터 필드 이름이 일치하는 경우에만 적용
 // Avatar 디버그 로그 수집
 var _avatarDebugLog = [];
-// ui.html에서 프리페치한 Avatar 이미지 데이터 (index → Uint8Array bytes)
-var _avatarImageData = {};
 
-async function randomFillData(category, data, avatarImageData) {
+async function randomFillData(category, data) {
   _avatarDebugLog = [];
-  _avatarImageData = avatarImageData || {};
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
@@ -1118,60 +1115,30 @@ async function fillMatchingLayersSequential(node, fieldMap) {
     if (matchingField.isImage) {
       _avatarDebugLog.push(`매칭:${node.name}(${node.type})`);
 
-      // 이미지 데이터 확보: 1) 프리페치 데이터 → 2) 시트 URL 직접 fetch → 3) 폴백 URL fetch
-      let imageData = null;
-
-      // 1단계: ui.html에서 프리페치한 데이터 확인
-      const imageBytes = _avatarImageData[String(currentIdx)] || _avatarImageData[currentIdx];
-      if (imageBytes && imageBytes.length > 0) {
-        imageData = new Uint8Array(imageBytes);
-        _avatarDebugLog.push(`프리페치OK:${imageData.length}b`);
-      } else {
-        _avatarDebugLog.push(`프리페치없음(keys:${Object.keys(_avatarImageData).join(',')})`);
-      }
-
-      // 2단계: 프리페치 없으면 시트 URL로 직접 시도
-      if (!imageData && matchingField.values && matchingField.values.length > 0) {
+      // 이미지 URL 결정: 시트 URL → 폴백 URL
+      let imageUrl = null;
+      if (matchingField.values && matchingField.values.length > 0) {
         const rawUrl = matchingField.values[currentIdx % matchingField.values.length];
-        const fetchUrl = convertImageUrl(rawUrl);
-        if (fetchUrl) {
-          _avatarDebugLog.push(`직접fetch:${fetchUrl.substring(0, 50)}`);
-          try {
-            const fetched = await fetchImageData(fetchUrl);
-            if (fetched) {
-              imageData = fetched;
-              _avatarDebugLog.push(`직접OK:${imageData.length}b`);
-            }
-          } catch (e) {
-            _avatarDebugLog.push(`직접실패:${e.message}`);
-          }
-        }
+        imageUrl = convertImageUrl(rawUrl);
       }
+      if (!imageUrl) {
+        imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
+      }
+      _avatarDebugLog.push(`URL:${imageUrl.substring(0, 60)}`);
 
-      // 3단계: 폴백 이미지
-      if (!imageData) {
-        const fallbackUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
-        _avatarDebugLog.push(`폴백fetch:${fallbackUrl.substring(0, 40)}`);
-        try {
-          imageData = await fetchImageData(fallbackUrl);
-          if (imageData) {
-            _avatarDebugLog.push(`폴백OK:${imageData.length}b`);
-          }
-        } catch (e) {
-          _avatarDebugLog.push(`폴백실패:${e.message}`);
-        }
-      }
+      // ui.html 라운드트립으로 이미지 다운로드
+      const imageData = await fetchImageData(imageUrl);
 
       if (!imageData) {
-        _avatarDebugLog.push('모든 이미지 로드 실패!');
+        _avatarDebugLog.push('이미지 로드 실패!');
       } else {
+        _avatarDebugLog.push(`로드OK:${imageData.length}b`);
         // 타겟 노드 찾기
         const targetNode = findImageTargetNode(node);
         if (!targetNode) {
           _avatarDebugLog.push('타겟노드 없음!');
         } else {
           _avatarDebugLog.push(`타겟:${targetNode.name}(${targetNode.type})`);
-
           try {
             const image = figma.createImage(imageData);
             const currentFills = targetNode.fills;
@@ -1536,19 +1503,36 @@ function getImageUrl(imageType, width, height) {
   }
 }
 
-// 이미지 데이터 가져오기
+// 이미지 데이터 가져오기 (ui.html 라운드트립 방식 - code.js 샌드박스에서는 fetch 불가)
 async function fetchImageData(url) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    return new Uint8Array(arrayBuffer);
-  } catch (e) {
-    console.error('Fetch image error:', e);
-    return null;
-  }
+  return new Promise((resolve) => {
+    const requestId = 'img_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+    console.log(`[fetchImageData] 요청: ${requestId} → ${url}`);
+
+    // 응답 핸들러 등록
+    const handler = (msg) => {
+      if (msg.type === 'image-data-response' && msg.requestId === requestId) {
+        figma.ui.off('message', handler);
+        if (msg.imageData && msg.imageData.length > 0) {
+          console.log(`[fetchImageData] 성공: ${msg.imageData.length} bytes`);
+          resolve(new Uint8Array(msg.imageData));
+        } else {
+          console.log(`[fetchImageData] 실패: 데이터 없음`);
+          resolve(null);
+        }
+      }
+    };
+
+    // 타임아웃 (10초)
+    setTimeout(() => {
+      figma.ui.off('message', handler);
+      console.log(`[fetchImageData] 타임아웃: ${requestId}`);
+      resolve(null);
+    }, 10000);
+
+    figma.ui.on('message', handler);
+    figma.ui.postMessage({ type: 'fetch-image', url: url, requestId: requestId });
+  });
 }
 
 // ===== 디자인 시스템 체커 =====

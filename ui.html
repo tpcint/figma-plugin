@@ -2094,6 +2094,28 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         if (tBtn) tBtn.classList.remove('loading');
       }
 
+      // code.js에서 이미지 fetch 요청 → ui.html에서 다운로드 후 바이너리 반환
+      if (msg.type === 'fetch-image') {
+        (async () => {
+          try {
+            console.log('[fetch-image] 요청:', msg.url);
+            const res = await fetch(msg.url);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const buf = await res.arrayBuffer();
+            const bytes = Array.from(new Uint8Array(buf));
+            console.log('[fetch-image] 성공:', bytes.length, 'bytes');
+            parent.postMessage({
+              pluginMessage: { type: 'image-data-response', requestId: msg.requestId, imageData: bytes }
+            }, '*');
+          } catch (e) {
+            console.error('[fetch-image] 실패:', msg.url, e.message);
+            parent.postMessage({
+              pluginMessage: { type: 'image-data-response', requestId: msg.requestId, imageData: null }
+            }, '*');
+          }
+        })();
+      }
+
       // Checker 관련 메시지
       if (msg.type === 'checker-status') showCheckerStatus(msg.message, msg.status);
       if (msg.type === 'checker-results') {
@@ -2424,95 +2446,13 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       }
     };
 
-    // Avatar 이미지 URL을 프록시 경유로 변환
-    function convertImageUrlForFetch(url) {
-      if (!url) return null;
-      if (url.includes('drive.google.com')) {
-        return `http://localhost:7777/proxy-image?url=${encodeURIComponent(url)}`;
-      }
-      if (url.match(/^https?:\/\//)) return url;
-      return null;
-    }
-
-    // Avatar 이미지 데이터를 미리 가져오기 (ui.html에서 fetch → code.js로 바이너리 전달)
-    async function prefetchAvatarImages(data) {
-      // isImage 필드 찾기 (이름 무관)
-      const avatarField = data.find(f => f.isImage === true);
-      console.log('[Avatar prefetch] avatarField:', avatarField ? avatarField.name : 'NOT FOUND',
-        'isImage:', avatarField ? avatarField.isImage : 'N/A',
-        'values:', avatarField ? avatarField.values.length : 0);
-      console.log('[Avatar prefetch] 모든 필드:', data.map(f => `${f.name}(isImage=${f.isImage})`).join(', '));
-
-      if (!avatarField) return {};
-
-      const imageDataMap = {};
-      const urls = avatarField.values || [];
-      const fallbackUrls = [
-        'https://i.pravatar.cc/300?img=1', 'https://i.pravatar.cc/300?img=5',
-        'https://i.pravatar.cc/300?img=9', 'https://i.pravatar.cc/300?img=16',
-        'https://i.pravatar.cc/300?img=20', 'https://i.pravatar.cc/300?img=25',
-        'https://i.pravatar.cc/300?img=32', 'https://i.pravatar.cc/300?img=36',
-        'https://i.pravatar.cc/300?img=41', 'https://i.pravatar.cc/300?img=47'
-      ];
-
-      // 시트 URL + 폴백 URL 준비 (최소 fallback 개수만큼은 확보)
-      const count = Math.max(urls.length, fallbackUrls.length);
-      const allUrls = [];
-      for (let i = 0; i < count; i++) {
-        let fetchUrl = null;
-        if (i < urls.length) {
-          fetchUrl = convertImageUrlForFetch(urls[i]);
-        }
-        if (!fetchUrl) {
-          fetchUrl = fallbackUrls[i % fallbackUrls.length];
-        }
-        allUrls.push({ index: i, url: fetchUrl });
-      }
-
-      console.log('[Avatar prefetch] 시작:', allUrls.length, '개, URLs:', allUrls.map(u => u.url.substring(0, 60)).join(' | '));
-
-      // 병렬로 이미지 가져오기
-      const results = await Promise.allSettled(allUrls.map(async ({ index, url }) => {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          const arrayBuffer = await res.arrayBuffer();
-          imageDataMap[index] = Array.from(new Uint8Array(arrayBuffer));
-          console.log(`[Avatar prefetch] ${index} OK: ${imageDataMap[index].length} bytes`);
-        } catch (e) {
-          console.error(`[Avatar prefetch] ${index} 실패(${url.substring(0,50)}):`, e.message);
-          // 폴백 재시도
-          try {
-            const fbUrl = fallbackUrls[index % fallbackUrls.length];
-            const res2 = await fetch(fbUrl);
-            if (res2.ok) {
-              const ab = await res2.arrayBuffer();
-              imageDataMap[index] = Array.from(new Uint8Array(ab));
-              console.log(`[Avatar prefetch] ${index} 폴백 OK`);
-            }
-          } catch (e2) {
-            console.error(`[Avatar prefetch] ${index} 폴백도 실패:`, e2.message);
-          }
-        }
-      }));
-
-      console.log('[Avatar prefetch] 완료:', Object.keys(imageDataMap).length, '/', allUrls.length, '성공');
-      return imageDataMap;
-    }
-
-    document.getElementById('randomFillBtn').onclick = async () => {
-      showDataFillStatus('이미지 로딩 중...', 'info');
-
-      // Avatar 이미지를 ui.html에서 미리 다운로드
-      const avatarImageData = await prefetchAvatarImages(dummyData[currentCategory]);
-
+    document.getElementById('randomFillBtn').onclick = () => {
       showDataFillStatus('랜덤 채우기 중...', 'info');
       parent.postMessage({
         pluginMessage: {
           type: 'random-fill',
           category: currentCategory,
-          data: dummyData[currentCategory],
-          avatarImageData: avatarImageData
+          data: dummyData[currentCategory]
         }
       }, '*');
     };
