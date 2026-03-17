@@ -1216,194 +1216,6 @@
       display: flex !important;
     }
 
-    /* Compare 탭 스타일 */
-    .compare-input-section {
-      margin-bottom: 16px;
-    }
-
-    .compare-textarea {
-      width: 100%;
-      height: calc(100vh - 300px);
-      padding: 12px;
-      border: 1px solid #D7D8E5;
-      border-radius: 12px;
-      font-size: 13px;
-      font-family: inherit;
-      resize: none;
-      background: #fff;
-    }
-
-    .compare-textarea:focus {
-      outline: none;
-      border-color: #110F1A;
-    }
-
-    .compare-source-tabs {
-      display: flex;
-      gap: 4px;
-      flex-wrap: wrap;
-      margin-bottom: 12px;
-    }
-
-    .compare-source-tab {
-      padding: 8px 16px;
-      border-radius: 20px;
-      border: 1px solid #D7D8E5;
-      background: #fff;
-      font-size: 13px;
-      font-weight: 500;
-      color: #5A5A73;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .compare-source-tab:hover {
-      border-color: #110F1A;
-    }
-
-    .compare-source-tab.active {
-      background: #110F1A;
-      border-color: #110F1A;
-      color: #fff;
-    }
-
-    .compare-results {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      max-height: 280px;
-      overflow-y: auto;
-    }
-
-    .compare-item {
-      display: flex;
-      align-items: flex-start;
-      padding: 12px 16px;
-      border-radius: 12px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .compare-item.match {
-      background: #ECFDF5;
-      border: 1px solid #A7F3D0;
-    }
-
-    .compare-item.mismatch {
-      background: #FEF2F2;
-      border: 1px solid #FECACA;
-    }
-
-    .compare-item.missing {
-      background: #FFFBEB;
-      border: 1px solid #FCD34D;
-    }
-
-    .compare-item:hover {
-      opacity: 0.9;
-    }
-
-    .compare-item-icon {
-      width: 24px;
-      height: 24px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-right: 12px;
-      flex-shrink: 0;
-      font-size: 14px;
-    }
-
-    .compare-item.match .compare-item-icon {
-      background: #D1FAE5;
-    }
-
-    .compare-item.mismatch .compare-item-icon {
-      background: #FEE2E2;
-    }
-
-    .compare-item.missing .compare-item-icon {
-      background: #FEF3C7;
-    }
-
-    .compare-item-content {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .compare-item-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: #838499;
-      margin-bottom: 4px;
-    }
-
-    .compare-item-text {
-      font-size: 13px;
-      color: #110F1A;
-      word-break: break-word;
-    }
-
-    .compare-item-diff {
-      margin-top: 6px;
-      padding-top: 6px;
-      border-top: 1px dashed #E5E7EB;
-    }
-
-    .compare-item-expected {
-      font-size: 12px;
-      color: #059669;
-    }
-
-    .compare-item-actual {
-      font-size: 12px;
-      color: #DC2626;
-      margin-top: 2px;
-    }
-
-    .compare-summary-bar {
-      display: flex;
-      gap: 12px;
-      padding: 12px 16px;
-      background: #F9FAFB;
-      border-radius: 12px;
-      margin-bottom: 12px;
-    }
-
-    .compare-stat {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-
-    .compare-stat-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-
-    .compare-stat-dot.match { background: #059669; }
-    .compare-stat-dot.mismatch { background: #DC2626; }
-    .compare-stat-dot.missing { background: #D97706; }
-
-    .notion-url-input {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid #D7D8E5;
-      border-radius: 12px;
-      font-size: 13px;
-      background: #fff;
-      margin-bottom: 8px;
-    }
-
-    .notion-url-input:focus {
-      outline: none;
-      border-color: #110F1A;
-    }
-
     /* 테이블 토큰 미리보기 */
     .token-table-preview-row {
       display: flex;
@@ -1444,7 +1256,6 @@
       <button class="tab" data-tab="code2design">Code2Design</button>
       <button class="tab" data-tab="variables">Variables</button>
       <button class="tab" data-tab="style">Checker</button>
-      <button class="tab" data-tab="compare">Notion</button>
     </div>
   </div>
 
@@ -1906,96 +1717,6 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
   </div>
 
   <!-- Compare 탭 -->
-  <div class="tab-content" id="compare-tab">
-    <div class="main-content">
-      <div class="card">
-        <!-- 소스 탭 전환 -->
-        <div class="compare-source-tabs">
-          <button class="compare-source-tab active" data-source="paste">텍스트 붙여넣기</button>
-          <button class="compare-source-tab" data-source="notion" style="display:none">Notion URL</button>
-        </div>
-
-        <!-- 텍스트 붙여넣기 영역 -->
-        <div id="pasteInputSection" class="compare-input-section">
-          <textarea id="notionContent" class="compare-textarea"
-            placeholder="마크다운 형식으로 붙여넣기 하세요.
-
-# 홈 화면          ← # 화면/섹션 이름
-제목: 마루에몽      ← 레이블: 텍스트
-버튼: 팔로우"></textarea>
-          <div style="margin-top:10px; display:flex; flex-direction:column; gap:4px;">
-            <p style="font-size:12px; font-weight:600; color:#110F1A; margin:0;">사용 방법</p>
-            <p style="font-size:11px; color:#5A5A73; margin:0;">① Figma에서 비교할 프레임을 선택하세요</p>
-            <p style="font-size:11px; color:#5A5A73; margin:0;">② Notion 기획서를 마크다운 형식으로 붙여넣으세요</p>
-            <p style="font-size:11px; color:#5A5A73; margin:0;">③ 비교하기 버튼을 누르면 일치·불일치·누락 항목을 확인할 수 있습니다</p>
-            <p style="font-size:11px; color:#838499; margin:4px 0 0 0;">💡 Notion 일반 복사 시 # 기호가 빠집니다.<br>Notion → 내보내기 → Markdown 을 사용하거나 # 기호를 직접 입력하세요.</p>
-          </div>
-        </div>
-
-        <!-- Notion URL 영역 (Integration Token 방식) -->
-        <div id="notionUrlSection" class="compare-input-section" style="display:none">
-
-          <!-- Integration Token 입력 -->
-          <div style="margin-bottom:8px;">
-            <p style="font-size:12px; font-weight:600; color:#110F1A; margin:0 0 6px 0;">Integration Token</p>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <input id="notionToken" type="password" class="notion-url-input"
-                placeholder="secret_xxxx..." style="margin-bottom:0; flex:1;">
-              <button id="saveTokenBtn" style="height:44px; padding:0 14px; border:1px solid #D7D8E5; border-radius:12px; font-size:13px; background:#fff; cursor:pointer; color:#5A5A73; white-space:nowrap; flex-shrink:0;">저장</button>
-            </div>
-          </div>
-
-          <!-- Page URL 입력 -->
-          <div style="margin-bottom:10px;">
-            <p style="font-size:12px; font-weight:600; color:#110F1A; margin:0 0 6px 0;">Notion 페이지 URL</p>
-            <input id="notionPageId" class="notion-url-input"
-              placeholder="https://notion.so/..." style="margin-bottom:0;">
-          </div>
-
-          <!-- 사용 방법 안내 -->
-          <div style="display:flex; flex-direction:column; gap:4px;">
-            <p style="font-size:12px; font-weight:600; color:#110F1A; margin:0;">사용 방법</p>
-            <p style="font-size:11px; color:#5A5A73; margin:0;">① Notion Settings → Connections → Develop or manage integrations</p>
-            <p style="font-size:11px; color:#5A5A73; margin:0;">② New integration 생성 → Internal Integration Secret 복사</p>
-            <p style="font-size:11px; color:#5A5A73; margin:0;">③ 연결할 Notion 페이지 우측 상단 ··· → Connections → integration 추가</p>
-            <p style="font-size:11px; color:#5A5A73; margin:0;">④ Token 저장 후 페이지 URL 입력 → 비교하기 클릭</p>
-            <p style="font-size:11px; color:#838499; margin:4px 0 0 0;">💡 Token은 브라우저 로컬에만 저장되며 외부로 전송되지 않습니다.</p>
-          </div>
-        </div>
-
-        <!-- 비교 버튼 -->
-        <button id="compareBtn" class="btn btn-primary" style="margin-top:8px">
-          <span class="btn-text">🔍 비교하기</span>
-          <span class="btn-loading">
-            <span class="btn-spinner"></span>
-            비교 중...
-          </span>
-        </button>
-
-        <!-- 상태 메시지 -->
-        <div id="compareStatus" class="status"></div>
-      </div>
-
-      <!-- 요약 바 -->
-      <div id="compareSummary" class="compare-summary-bar" style="display:none">
-        <div class="compare-stat">
-          <div class="compare-stat-dot match"></div>
-          <span id="matchCount">0</span> 일치
-        </div>
-        <div class="compare-stat">
-          <div class="compare-stat-dot mismatch"></div>
-          <span id="mismatchCount">0</span> 불일치
-        </div>
-        <div class="compare-stat">
-          <div class="compare-stat-dot missing"></div>
-          <span id="missingCount">0</span> 누락
-        </div>
-      </div>
-
-      <!-- 결과 목록 -->
-      <div id="compareResults" class="compare-results"></div>
-    </div>
-  </div>
 
 
   </div><!-- content-wrapper 닫기 -->
@@ -2381,31 +2102,6 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         showCheckerStatus(`스캔 완료: ${msg.results.filter(r => !r.isApplied).length}개 미적용 발견`, 'success');
       }
 
-      // Compare 관련 메시지
-      if (msg.type === 'compare-status') {
-        document.getElementById('compareBtn').classList.remove('loading');
-        showCompareStatus(msg.message, msg.status);
-        // 에러 시 results 영역도 정리
-        if (msg.status === 'error') {
-          document.getElementById('compareResults').innerHTML = `
-            <div class="checker-empty">
-              <div class="checker-empty-icon">⚠️</div>
-              <div class="checker-empty-text">${msg.message}</div>
-            </div>
-          `;
-        }
-      }
-      if (msg.type === 'compare-results') {
-        document.getElementById('compareBtn').classList.remove('loading');
-        renderCompareResults(msg.results);
-        const mismatchCount = msg.results.filter(r => r.status === 'mismatch').length;
-        const missingCount = msg.results.filter(r => r.status === 'missing').length;
-        if (mismatchCount + missingCount === 0) {
-          showCompareStatus('모든 내용이 일치합니다! 🎉', 'success');
-        } else {
-          showCompareStatus(`${mismatchCount}개 불일치, ${missingCount}개 누락 발견`, 'error');
-        }
-      }
     };
 
     async function checkSpelling(texts) {
@@ -2728,264 +2424,95 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       }
     };
 
-    document.getElementById('randomFillBtn').onclick = () => {
+    // Avatar 이미지 URL을 프록시 경유로 변환
+    function convertImageUrlForFetch(url) {
+      if (!url) return null;
+      if (url.includes('drive.google.com')) {
+        return `http://localhost:7777/proxy-image?url=${encodeURIComponent(url)}`;
+      }
+      if (url.match(/^https?:\/\//)) return url;
+      return null;
+    }
+
+    // Avatar 이미지 데이터를 미리 가져오기 (ui.html에서 fetch → code.js로 바이너리 전달)
+    async function prefetchAvatarImages(data) {
+      const avatarField = data.find(f => f.isImage && f.name === 'Avatar');
+      if (!avatarField) return {};
+
+      const imageDataMap = {};
+      const urls = avatarField.values || [];
+      const fallbackUrls = [
+        'https://i.pravatar.cc/300?img=1', 'https://i.pravatar.cc/300?img=5',
+        'https://i.pravatar.cc/300?img=9', 'https://i.pravatar.cc/300?img=16',
+        'https://i.pravatar.cc/300?img=20', 'https://i.pravatar.cc/300?img=25',
+        'https://i.pravatar.cc/300?img=32', 'https://i.pravatar.cc/300?img=36',
+        'https://i.pravatar.cc/300?img=41', 'https://i.pravatar.cc/300?img=47'
+      ];
+
+      // 시트 URL 변환 + 폴백 URL 준비
+      const allUrls = [];
+      for (let i = 0; i < Math.max(urls.length, fallbackUrls.length); i++) {
+        let fetchUrl = null;
+        if (i < urls.length) {
+          fetchUrl = convertImageUrlForFetch(urls[i]);
+        }
+        if (!fetchUrl) {
+          fetchUrl = fallbackUrls[i % fallbackUrls.length];
+        }
+        allUrls.push({ index: i, url: fetchUrl });
+      }
+
+      console.log('[Avatar] 이미지 프리페치 시작:', allUrls.length, '개');
+
+      // 병렬로 이미지 가져오기
+      await Promise.all(allUrls.map(async ({ index, url }) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const arrayBuffer = await res.arrayBuffer();
+          imageDataMap[index] = Array.from(new Uint8Array(arrayBuffer));
+          console.log(`[Avatar] 이미지 ${index} 로드 성공: ${imageDataMap[index].length} bytes`);
+        } catch (e) {
+          console.error(`[Avatar] 이미지 ${index} 로드 실패:`, e.message);
+          // 폴백으로 재시도
+          try {
+            const fallbackUrl = fallbackUrls[index % fallbackUrls.length];
+            const res = await fetch(fallbackUrl);
+            if (res.ok) {
+              const arrayBuffer = await res.arrayBuffer();
+              imageDataMap[index] = Array.from(new Uint8Array(arrayBuffer));
+              console.log(`[Avatar] 이미지 ${index} 폴백 성공`);
+            }
+          } catch (e2) {
+            console.error(`[Avatar] 이미지 ${index} 폴백도 실패:`, e2.message);
+          }
+        }
+      }));
+
+      console.log('[Avatar] 프리페치 완료:', Object.keys(imageDataMap).length, '개 성공');
+      return imageDataMap;
+    }
+
+    document.getElementById('randomFillBtn').onclick = async () => {
+      showDataFillStatus('이미지 로딩 중...', 'info');
+
+      // Avatar 이미지를 ui.html에서 미리 다운로드
+      const avatarImageData = await prefetchAvatarImages(dummyData[currentCategory]);
+
       showDataFillStatus('랜덤 채우기 중...', 'info');
       parent.postMessage({
-        pluginMessage: { type: 'random-fill', category: currentCategory, data: dummyData[currentCategory] }
+        pluginMessage: {
+          type: 'random-fill',
+          category: currentCategory,
+          data: dummyData[currentCategory],
+          avatarImageData: avatarImageData
+        }
       }, '*');
     };
 
     // 초기 렌더링
     renderFields('creator');
 
-    // ===== Compare 탭 =====
-    let compareSource = 'paste';
-    const compareResults = document.getElementById('compareResults');
-    const compareStatus = document.getElementById('compareStatus');
-    const compareSummary = document.getElementById('compareSummary');
-
-    // 소스 탭 전환
-    document.querySelectorAll('.compare-source-tab').forEach(tab => {
-      tab.onclick = () => {
-        document.querySelectorAll('.compare-source-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        compareSource = tab.dataset.source;
-
-        // 입력 섹션 전환
-        document.getElementById('pasteInputSection').style.display = compareSource === 'paste' ? 'block' : 'none';
-        document.getElementById('notionUrlSection').style.display = compareSource === 'notion' ? 'block' : 'none';
-      };
-    });
-
-    // Token 로컬 저장/불러오기 (localStorage가 제한된 환경 대비 try-catch)
-    try {
-      const savedNotionToken = localStorage.getItem('notionToken');
-      if (savedNotionToken) {
-        document.getElementById('notionToken').value = savedNotionToken;
-      }
-    } catch(e) {}
-    document.getElementById('saveTokenBtn').onclick = () => {
-      const token = document.getElementById('notionToken').value.trim();
-      if (token) {
-        try { localStorage.setItem('notionToken', token); } catch(e) {}
-        const btn = document.getElementById('saveTokenBtn');
-        btn.textContent = '저장됨 ✓';
-        btn.style.color = '#059669';
-        btn.style.borderColor = '#059669';
-        setTimeout(() => {
-          btn.textContent = '저장';
-          btn.style.color = '#5A5A73';
-          btn.style.borderColor = '#D7D8E5';
-        }, 2000);
-      }
-    };
-
-    function showCompareStatus(message, type) {
-      compareStatus.textContent = message;
-      compareStatus.className = 'status show ' + type;
-    }
-
-    // 비교 버튼
-    document.getElementById('compareBtn').onclick = () => {
-      let notionText = '';
-
-      if (compareSource === 'paste') {
-        notionText = document.getElementById('notionContent').value.trim();
-      } else {
-        const pageUrl = document.getElementById('notionPageId').value.trim();
-        const token = document.getElementById('notionToken').value.trim();
-        if (!pageUrl) {
-          showCompareStatus('Notion 페이지 URL을 입력해주세요', 'error');
-          return;
-        }
-        if (!token) {
-          showCompareStatus('Integration Token을 입력해주세요', 'error');
-          return;
-        }
-        document.getElementById('compareBtn').classList.add('loading');
-        fetchNotionPage(pageUrl, token);
-        return;
-      }
-
-      if (!notionText) {
-        showCompareStatus('비교할 내용을 입력해주세요', 'error');
-        return;
-      }
-
-      document.getElementById('compareBtn').classList.add('loading');
-      showCompareStatus('비교 중...', 'info');
-      compareResults.innerHTML = `
-        <div class="checker-loading">
-          <div class="checker-spinner"></div>
-          <div>Figma 텍스트와 비교 중...</div>
-        </div>
-      `;
-
-      // Figma에 비교 요청
-      parent.postMessage({
-        pluginMessage: { type: 'compare-with-notion', notionText: notionText }
-      }, '*');
-    };
-
-    // Notion URL → UUID 추출
-    function extractPageId(url) {
-      // 32자 hex 추출 (하이픈 포함 UUID도 처리)
-      const uuidMatch = url.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-      if (uuidMatch) return uuidMatch[1];
-      const hexMatch = url.match(/([0-9a-f]{32})(?:[?#/]|$)/i);
-      if (!hexMatch) return null;
-      const h = hexMatch[1];
-      return [h.slice(0,8), h.slice(8,12), h.slice(12,16), h.slice(16,20), h.slice(20)].join('-');
-    }
-
-    // Notion 블록 → 마크다운 텍스트 변환
-    function notionBlocksToText(blocks) {
-      return blocks.map(block => {
-        const type = block.type;
-        const content = block[type];
-        if (!content) return '';
-        const richText = content.rich_text;
-        if (!richText) return '';
-        const text = richText.map(t => t.plain_text).join('');
-        if (!text.trim()) return '';
-        if (type === 'heading_1') return '# ' + text;
-        if (type === 'heading_2') return '## ' + text;
-        if (type === 'heading_3') return '### ' + text;
-        if (type === 'bulleted_list_item') return '- ' + text;
-        if (type === 'numbered_list_item') return text;
-        if (type === 'to_do') return (content.checked ? '[x] ' : '[ ] ') + text;
-        return text;
-      }).filter(Boolean).join('\n');
-    }
-
-    // Notion API로 페이지 가져오기
-    async function fetchNotionPage(pageUrl, token) {
-      const pageId = extractPageId(pageUrl);
-      if (!pageId) {
-        showCompareStatus('올바른 Notion 페이지 URL을 입력해주세요', 'error');
-        document.getElementById('compareBtn').classList.remove('loading');
-        return;
-      }
-
-      showCompareStatus('Notion 페이지 불러오는 중...', 'info');
-      compareResults.innerHTML = `
-        <div class="checker-loading">
-          <div class="checker-spinner"></div>
-          <div>Notion 페이지 로딩 중...</div>
-        </div>
-      `;
-
-      try {
-        const res = await fetch(
-          'https://api.notion.com/v1/blocks/' + pageId + '/children?page_size=100',
-          {
-            headers: {
-              'Authorization': 'Bearer ' + token,
-              'Notion-Version': '2022-06-28',
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-
-        if (!res.ok) {
-          let errMsg = 'HTTP ' + res.status;
-          try { const err = await res.json(); errMsg = err.message || errMsg; } catch(e) {}
-          showCompareStatus('Notion API 오류: ' + errMsg, 'error');
-          document.getElementById('compareBtn').classList.remove('loading');
-          compareResults.innerHTML = '';
-          return;
-        }
-
-        const data = await res.json();
-        const notionText = notionBlocksToText(data.results || []);
-
-        if (!notionText.trim()) {
-          showCompareStatus('페이지 내용이 비어있거나 지원하지 않는 블록 형식입니다', 'error');
-          document.getElementById('compareBtn').classList.remove('loading');
-          compareResults.innerHTML = '';
-          return;
-        }
-
-        showCompareStatus('비교 중...', 'info');
-        compareResults.innerHTML = `
-          <div class="checker-loading">
-            <div class="checker-spinner"></div>
-            <div>Figma 텍스트와 비교 중...</div>
-          </div>
-        `;
-
-        parent.postMessage({
-          pluginMessage: { type: 'compare-with-notion', notionText: notionText }
-        }, '*');
-
-      } catch (e) {
-        showCompareStatus('네트워크 오류: ' + e.message, 'error');
-        document.getElementById('compareBtn').classList.remove('loading');
-        compareResults.innerHTML = '';
-      }
-    }
-
-    // 비교 결과 렌더링
-    function renderCompareResults(results) {
-      if (!results || results.length === 0) {
-        compareResults.innerHTML = `
-          <div class="checker-empty">
-            <div class="checker-empty-icon">🤔</div>
-            <div class="checker-empty-text">비교할 내용이 없습니다</div>
-            <div class="checker-empty-subtext">Figma에서 레이어를 선택하고 다시 시도해주세요</div>
-          </div>
-        `;
-        compareSummary.style.display = 'none';
-        return;
-      }
-
-      // 통계 계산
-      const matchCount = results.filter(r => r.status === 'match').length;
-      const mismatchCount = results.filter(r => r.status === 'mismatch').length;
-      const missingCount = results.filter(r => r.status === 'missing').length;
-
-      // 요약 표시
-      compareSummary.style.display = 'flex';
-      document.getElementById('matchCount').textContent = matchCount;
-      document.getElementById('mismatchCount').textContent = mismatchCount;
-      document.getElementById('missingCount').textContent = missingCount;
-
-      // 결과 목록 (불일치/누락 우선 표시)
-      const sortedResults = [...results].sort((a, b) => {
-        const order = { mismatch: 0, missing: 1, match: 2 };
-        return order[a.status] - order[b.status];
-      });
-
-      compareResults.innerHTML = sortedResults.map(item => `
-        <div class="compare-item ${item.status}" data-node-id="${item.nodeId || ''}">
-          <div class="compare-item-icon">
-            ${item.status === 'match' ? '✅' : item.status === 'mismatch' ? '❌' : '⚠️'}
-          </div>
-          <div class="compare-item-content">
-            <div class="compare-item-label">${item.label || '텍스트'}</div>
-            <div class="compare-item-text">${item.status === 'missing' ? item.expected : item.actual}</div>
-            ${item.status === 'mismatch' ? `
-              <div class="compare-item-diff">
-                <div class="compare-item-expected">기획: ${item.expected}</div>
-                <div class="compare-item-actual">디자인: ${item.actual}</div>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      `).join('');
-
-      // 클릭 시 해당 노드 선택
-      compareResults.querySelectorAll('.compare-item').forEach(item => {
-        item.onclick = () => {
-          const nodeId = item.dataset.nodeId;
-          if (nodeId) {
-            parent.postMessage({
-              pluginMessage: { type: 'select-node', nodeId: nodeId }
-            }, '*');
-          }
-        };
-      });
-    }
 
     // ===== Code2Design 탭 =====
     const codeInput = document.getElementById('codeInput');

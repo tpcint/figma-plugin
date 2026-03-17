@@ -144,7 +144,7 @@ figma.ui.onmessage = async (msg) => {
 
   // 랜덤 채우기
   if (msg.type === 'random-fill') {
-    await randomFillData(msg.category, msg.data);
+    await randomFillData(msg.category, msg.data, msg.avatarImageData);
   }
 
   // 이미지 채우기
@@ -170,11 +170,6 @@ figma.ui.onmessage = async (msg) => {
   // 여러 노드 선택
   if (msg.type === 'select-multiple-nodes') {
     selectMultipleNodes(msg.nodeIds);
-  }
-
-  // 노션 내용과 비교
-  if (msg.type === 'compare-with-notion') {
-    compareWithNotion(msg.notionText);
   }
 
   // 코드에서 디자인 생성
@@ -1029,9 +1024,12 @@ async function applyDummyData(value) {
 // 순서대로 채우기 - 레이어 이름과 데이터 필드 이름이 일치하는 경우에만 적용
 // Avatar 디버그 로그 수집
 var _avatarDebugLog = [];
+// ui.html에서 프리페치한 Avatar 이미지 데이터 (index → Uint8Array bytes)
+var _avatarImageData = {};
 
-async function randomFillData(category, data) {
+async function randomFillData(category, data, avatarImageData) {
   _avatarDebugLog = [];
+  _avatarImageData = avatarImageData || {};
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
@@ -1085,16 +1083,17 @@ async function randomFillData(category, data) {
     return;
   }
 
+  const avatarInfo = _avatarDebugLog.length > 0 ? '\n[Avatar] ' + _avatarDebugLog.join(' → ') : '';
+
   if (changed === 0) {
     figma.ui.postMessage({
       type: 'data-fill-status',
       status: 'error',
-      message: '선택된 영역에 텍스트가 없습니다.'
+      message: `매칭된 레이어(${matched}개)에 적용할 데이터가 없습니다.${avatarInfo}`
     });
     return;
   }
 
-  const avatarInfo = _avatarDebugLog.length > 0 ? '\n[Avatar] ' + _avatarDebugLog.join(' → ') : '';
   figma.ui.postMessage({
     type: 'data-fill-status',
     status: 'success',
@@ -1119,31 +1118,22 @@ async function fillMatchingLayersSequential(node, fieldMap) {
     if (matchingField.isImage) {
       _avatarDebugLog.push(`매칭:${node.name}(${node.type})`);
 
-      // 이미지 URL 결정
-      let imageUrl = null;
-      if (matchingField.values && matchingField.values.length > 0) {
-        const rawUrl = matchingField.values[currentIdx % matchingField.values.length];
-        imageUrl = convertImageUrl(rawUrl);
-        console.log(`[Avatar] 시트 URL: raw="${rawUrl}" → converted="${imageUrl}"`);
-      }
-      if (!imageUrl) {
-        imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
-      }
-      _avatarDebugLog.push(`URL:${imageUrl.substring(0, 50)}`);
+      // ui.html에서 프리페치한 이미지 데이터 사용
+      const imageBytes = _avatarImageData[String(currentIdx)] || _avatarImageData[currentIdx];
+      _avatarDebugLog.push(`프리페치 idx=${currentIdx}, 데이터=${imageBytes ? imageBytes.length + 'bytes' : '없음'}`);
 
-      // 타겟 노드 찾기
-      const targetNode = findImageTargetNode(node);
-      if (!targetNode) {
-        _avatarDebugLog.push('타겟노드 없음!');
+      if (!imageBytes || imageBytes.length === 0) {
+        _avatarDebugLog.push('프리페치 데이터 없음, 스킵');
       } else {
-        _avatarDebugLog.push(`타겟:${targetNode.name}(${targetNode.type})`);
+        // 타겟 노드 찾기
+        const targetNode = findImageTargetNode(node);
+        if (!targetNode) {
+          _avatarDebugLog.push('타겟노드 없음!');
+        } else {
+          _avatarDebugLog.push(`타겟:${targetNode.name}(${targetNode.type})`);
 
-        try {
-          const imageData = await fetchImageData(imageUrl);
-          if (!imageData) {
-            _avatarDebugLog.push(`fetch실패:${imageUrl.substring(0, 40)}`);
-          } else {
-            _avatarDebugLog.push(`fetch성공:${imageData.length}bytes`);
+          try {
+            const imageData = new Uint8Array(imageBytes);
             const image = figma.createImage(imageData);
             const currentFills = targetNode.fills;
             if (currentFills === figma.mixed) {
@@ -1161,9 +1151,9 @@ async function fillMatchingLayersSequential(node, fieldMap) {
               changed++;
               _avatarDebugLog.push('적용완료!');
             }
+          } catch (e) {
+            _avatarDebugLog.push(`오류:${e.message}`);
           }
-        } catch (e) {
-          _avatarDebugLog.push(`오류:${e.message}`);
         }
       }
     } else if (matchingField.values && matchingField.values.length > 0) {
@@ -1772,253 +1762,6 @@ function checkVariables(selection) {
 // ===== Notion 비교 기능 =====
 
 // 노션 내용과 Figma 텍스트 비교
-function compareWithNotion(notionText) {
-  const selection = figma.currentPage.selection;
-
-  if (selection.length === 0) {
-    figma.ui.postMessage({
-      type: 'compare-status',
-      status: 'error',
-      message: '먼저 Figma에서 레이어를 선택해주세요.'
-    });
-    return;
-  }
-
-  // 노션 텍스트 파싱 (키워드 추출)
-  const notionKeywords = parseNotionContent(notionText);
-
-  // 구조 항목(# 헤더)과 텍스트 항목 분리
-  const structuralKeywords = notionKeywords.filter(k => k.isStructural);
-  const textKeywords = notionKeywords.filter(k => !k.isStructural);
-
-  // Figma에서 텍스트 노드 + 프레임 이름 수집
-  const figmaTexts = [];
-  const figmaFrames = [];
-  for (const node of selection) {
-    collectTextsWithInfo(node, figmaTexts);
-    collectFrameNames(node, figmaFrames);
-  }
-
-  // 비교 수행: 구조 항목 → 프레임 이름과, 텍스트 항목 → 텍스트 노드와 비교
-  const structureResults = structuralKeywords.length > 0
-    ? performComparison(structuralKeywords, figmaFrames)
-    : [];
-  const textResults = textKeywords.length > 0
-    ? performComparison(textKeywords, figmaTexts)
-    : [];
-
-  // 화면/섹션 결과를 앞에 배치, 텍스트 결과를 뒤에
-  const results = [...structureResults, ...textResults];
-
-  figma.ui.postMessage({
-    type: 'compare-results',
-    results: results
-  });
-}
-
-// 노션 내용 파싱 - 키워드 추출
-function parseNotionContent(text) {
-  const keywords = [];
-  const lines = text.split('\n');
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    // "# 헤더" / "## 서브헤더" → 화면/섹션 구조 항목으로 처리
-    if (trimmed.startsWith('#')) {
-      const headerText = trimmed.replace(/^#+\s*/, '').trim();
-      if (headerText) {
-        keywords.push({
-          label: '화면/섹션',
-          text: headerText,
-          original: trimmed,
-          isStructural: true
-        });
-      }
-      continue;
-    }
-
-    // "- " 또는 "• " 로 시작하는 항목 처리
-    let content = trimmed.replace(/^[-•*]\s*/, '');
-
-    // "제목:", "버튼:", "텍스트:" 등의 라벨 처리
-    const labelMatch = content.match(/^(.+?)[:：]\s*(.+)$/);
-
-    if (labelMatch) {
-      const label = labelMatch[1].trim();
-      const values = labelMatch[2].split(/[,，、]/);
-
-      for (const value of values) {
-        const v = value.trim();
-        if (v) {
-          keywords.push({
-            label: label,
-            text: v,
-            original: content
-          });
-        }
-      }
-    } else {
-      // 라벨 없는 일반 텍스트
-      keywords.push({
-        label: '텍스트',
-        text: content,
-        original: content
-      });
-    }
-  }
-
-  return keywords;
-}
-
-// Figma에서 텍스트 노드 수집 (정보 포함)
-function collectTextsWithInfo(node, results, path = '') {
-  if (node.type === 'TEXT') {
-    const text = node.characters.trim();
-    if (text) {
-      results.push({
-        nodeId: node.id,
-        name: node.name,
-        text: text,
-        path: path ? `${path} > ${node.name}` : node.name
-      });
-    }
-  }
-
-  if ('children' in node && node.children) {
-    const currentPath = path ? `${path} > ${node.name}` : node.name;
-    for (const child of node.children) {
-      collectTextsWithInfo(child, results, currentPath);
-    }
-  }
-}
-
-// Figma에서 프레임/컴포넌트 이름 수집 (화면 구조 비교용)
-function collectFrameNames(node, results, path) {
-  path = path || '';
-  const structuralTypes = ['FRAME', 'COMPONENT', 'COMPONENT_SET', 'GROUP'];
-  if (structuralTypes.indexOf(node.type) !== -1 && node.name) {
-    results.push({
-      nodeId: node.id,
-      name: node.name,
-      text: node.name,
-      path: path ? path + ' > ' + node.name : node.name
-    });
-  }
-  if ('children' in node && node.children) {
-    const currentPath = path ? path + ' > ' + node.name : node.name;
-    for (var i = 0; i < node.children.length; i++) {
-      collectFrameNames(node.children[i], results, currentPath);
-    }
-  }
-}
-
-// 텍스트 비교 수행
-function performComparison(notionKeywords, figmaTexts) {
-  const results = [];
-  const matchedNotionIndices = new Set();
-  const matchedFigmaIndices = new Set();
-
-  // 1. 정확히 일치하는 것 찾기
-  for (let i = 0; i < notionKeywords.length; i++) {
-    const notion = notionKeywords[i];
-
-    for (let j = 0; j < figmaTexts.length; j++) {
-      if (matchedFigmaIndices.has(j)) continue;
-
-      const figma = figmaTexts[j];
-
-      // 정확히 일치
-      if (figma.text === notion.text) {
-        results.push({
-          status: 'match',
-          label: notion.label,
-          expected: notion.text,
-          actual: figma.text,
-          nodeId: figma.nodeId
-        });
-        matchedNotionIndices.add(i);
-        matchedFigmaIndices.add(j);
-        break;
-      }
-    }
-  }
-
-  // 2. 부분 일치 또는 유사한 것 찾기 (불일치)
-  for (let i = 0; i < notionKeywords.length; i++) {
-    if (matchedNotionIndices.has(i)) continue;
-
-    const notion = notionKeywords[i];
-    let bestMatch = null;
-    let bestMatchIndex = -1;
-    let bestSimilarity = 0;
-
-    for (let j = 0; j < figmaTexts.length; j++) {
-      if (matchedFigmaIndices.has(j)) continue;
-
-      const figma = figmaTexts[j];
-
-      // 포함 관계 체크
-      const similarity = calculateSimilarity(notion.text, figma.text);
-
-      if (similarity > bestSimilarity && similarity > 0.3) {
-        bestSimilarity = similarity;
-        bestMatch = figma;
-        bestMatchIndex = j;
-      }
-    }
-
-    if (bestMatch) {
-      results.push({
-        status: 'mismatch',
-        label: notion.label,
-        expected: notion.text,
-        actual: bestMatch.text,
-        nodeId: bestMatch.nodeId
-      });
-      matchedNotionIndices.add(i);
-      matchedFigmaIndices.add(bestMatchIndex);
-    }
-  }
-
-  // 3. 매칭되지 않은 노션 키워드 (누락)
-  for (let i = 0; i < notionKeywords.length; i++) {
-    if (matchedNotionIndices.has(i)) continue;
-
-    const notion = notionKeywords[i];
-    results.push({
-      status: 'missing',
-      label: notion.label,
-      expected: notion.text,
-      actual: '',
-      nodeId: null
-    });
-  }
-
-  return results;
-}
-
-// 문자열 유사도 계산 (Jaccard 유사도 기반)
-function calculateSimilarity(str1, str2) {
-  const s1 = str1.toLowerCase();
-  const s2 = str2.toLowerCase();
-
-  // 한 문자열이 다른 문자열을 포함하면 높은 유사도
-  if (s1.includes(s2) || s2.includes(s1)) {
-    return 0.8;
-  }
-
-  // 문자 단위 Jaccard 유사도
-  const set1 = new Set(s1.split(''));
-  const set2 = new Set(s2.split(''));
-
-  const intersection = new Set([...set1].filter(x => set2.has(x)));
-  const union = new Set([...set1, ...set2]);
-
-  return intersection.size / union.size;
-}
-
 // ===== Code2Design 기능 =====
 
 // 코드에서 Figma 디자인 생성
