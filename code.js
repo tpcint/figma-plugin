@@ -1104,14 +1104,16 @@ async function fillMatchingLayersSequential(node, fieldMap) {
 
     if (matchingField.isImage) {
       // 이미지 필드: 시트 URL 우선, 없으면 PROFILE_IMAGES 폴백
-      let imageUrl;
+      let imageUrl = null;
       if (matchingField.values && matchingField.values.length > 0) {
         const rawUrl = matchingField.values[currentIdx % matchingField.values.length];
         imageUrl = convertGoogleDriveUrl(rawUrl);
-        console.log(`[Avatar] 시트 URL 사용: ${imageUrl}`);
-      } else {
+        console.log(`[Avatar] 시트 URL: raw="${rawUrl}" → converted="${imageUrl}"`);
+      }
+      // 시트 URL이 없거나 변환 실패 시 PROFILE_IMAGES 폴백
+      if (!imageUrl) {
         imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
-        console.log(`[Avatar] PROFILE_IMAGES 폴백 사용: ${imageUrl}`);
+        console.log(`[Avatar] PROFILE_IMAGES 폴백: ${imageUrl}`);
       }
       // IMAGE fill이 있는 노드를 우선 탐색, 없으면 첫 번째 ELLIPSE/RECTANGLE 사용
       const targetNode = findImageTargetNode(node);
@@ -1384,22 +1386,26 @@ function findFillableNodes(selection) {
   return fillableNodes;
 }
 
-// Google Drive 공유 URL → 직접 다운로드 URL 변환
+// Google Drive 공유 URL → 직접 접근 URL 변환 (리다이렉트 없이)
 function convertGoogleDriveUrl(url) {
-  if (!url) return url;
-  // https://drive.google.com/file/d/FILE_ID/view?...
+  if (!url) return null;
+  // https://drive.google.com/file/d/FILE_ID/...
   const fileMatch = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
   if (fileMatch) {
-    const id = fileMatch[1];
-    return `https://drive.google.com/thumbnail?id=${id}&sz=w400-h400`;
+    return `https://lh3.googleusercontent.com/d/${fileMatch[1]}`;
   }
   // https://drive.google.com/open?id=FILE_ID
   const openMatch = url.match(/drive\.google\.com\/open\?.*id=([^&]+)/);
   if (openMatch) {
-    const id = openMatch[1];
-    return `https://drive.google.com/thumbnail?id=${id}&sz=w400-h400`;
+    return `https://lh3.googleusercontent.com/d/${openMatch[1]}`;
   }
-  return url;
+  // http(s)://로 시작하는 일반 URL은 그대로 사용
+  if (url.match(/^https?:\/\//)) {
+    return url;
+  }
+  // URL이 아닌 값 (파일명 등)은 null 반환 → 폴백 사용
+  console.log(`[Avatar] URL 아닌 값 무시: ${url}`);
+  return null;
 }
 
 // Avatar용: IMAGE fill 노드를 우선 탐색, 없으면 첫 번째 ELLIPSE/RECTANGLE 반환
