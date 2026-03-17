@@ -1107,7 +1107,7 @@ async function fillMatchingLayersSequential(node, fieldMap) {
       let imageUrl = null;
       if (matchingField.values && matchingField.values.length > 0) {
         const rawUrl = matchingField.values[currentIdx % matchingField.values.length];
-        imageUrl = convertGoogleDriveUrl(rawUrl);
+        imageUrl = convertImageUrl(rawUrl);
         console.log(`[Avatar] 시트 URL: raw="${rawUrl}" → converted="${imageUrl}"`);
       }
       // 시트 URL이 없거나 변환 실패 시 PROFILE_IMAGES 폴백
@@ -1386,18 +1386,12 @@ function findFillableNodes(selection) {
   return fillableNodes;
 }
 
-// Google Drive 공유 URL → 직접 접근 URL 변환 (리다이렉트 없이)
-function convertGoogleDriveUrl(url) {
+// 이미지 URL을 pen-server 프록시 경유로 변환 (Google Drive 등)
+function convertImageUrl(url) {
   if (!url) return null;
-  // https://drive.google.com/file/d/FILE_ID/...
-  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
-  if (fileMatch) {
-    return `https://lh3.googleusercontent.com/d/${fileMatch[1]}`;
-  }
-  // https://drive.google.com/open?id=FILE_ID
-  const openMatch = url.match(/drive\.google\.com\/open\?.*id=([^&]+)/);
-  if (openMatch) {
-    return `https://lh3.googleusercontent.com/d/${openMatch[1]}`;
+  // Google Drive URL이면 로컬 프록시 경유 (CORS/리다이렉트 문제 회피)
+  if (url.includes('drive.google.com')) {
+    return `http://localhost:7777/proxy-image?url=${encodeURIComponent(url)}`;
   }
   // http(s)://로 시작하는 일반 URL은 그대로 사용
   if (url.match(/^https?:\/\//)) {
