@@ -1377,12 +1377,14 @@ function convertGoogleDriveUrl(url) {
   // https://drive.google.com/file/d/FILE_ID/view?...
   const fileMatch = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
   if (fileMatch) {
-    return `https://drive.google.com/uc?export=download&id=${fileMatch[1]}`;
+    const id = fileMatch[1];
+    return `https://drive.google.com/thumbnail?id=${id}&sz=w400-h400`;
   }
   // https://drive.google.com/open?id=FILE_ID
   const openMatch = url.match(/drive\.google\.com\/open\?.*id=([^&]+)/);
   if (openMatch) {
-    return `https://drive.google.com/uc?export=download&id=${openMatch[1]}`;
+    const id = openMatch[1];
+    return `https://drive.google.com/thumbnail?id=${id}&sz=w400-h400`;
   }
   return url;
 }
