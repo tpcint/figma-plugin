@@ -1103,8 +1103,14 @@ async function fillMatchingLayersSequential(node, fieldMap) {
     matchingField.currentIndex++;
 
     if (matchingField.isImage) {
-      // 이미지 필드: Name과 같은 인덱스로 PROFILE_IMAGES 사용
-      const imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
+      // 이미지 필드: 시트 URL 우선, 없으면 PROFILE_IMAGES 폴백
+      let imageUrl;
+      if (matchingField.values && matchingField.values.length > 0) {
+        const rawUrl = matchingField.values[currentIdx % matchingField.values.length];
+        imageUrl = convertGoogleDriveUrl(rawUrl);
+      } else {
+        imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
+      }
       // IMAGE fill이 있는 노드를 우선 탐색, 없으면 첫 번째 ELLIPSE/RECTANGLE 사용
       const targetNode = findImageTargetNode(node);
       if (targetNode) {
@@ -1363,6 +1369,22 @@ function findFillableNodes(selection) {
   console.log('=== Found nodes ===');
   fillableNodes.forEach(n => console.log(`  - ${n.name} (${n.type})`));
   return fillableNodes;
+}
+
+// Google Drive 공유 URL → 직접 다운로드 URL 변환
+function convertGoogleDriveUrl(url) {
+  if (!url) return url;
+  // https://drive.google.com/file/d/FILE_ID/view?...
+  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
+  if (fileMatch) {
+    return `https://drive.google.com/uc?export=download&id=${fileMatch[1]}`;
+  }
+  // https://drive.google.com/open?id=FILE_ID
+  const openMatch = url.match(/drive\.google\.com\/open\?.*id=([^&]+)/);
+  if (openMatch) {
+    return `https://drive.google.com/uc?export=download&id=${openMatch[1]}`;
+  }
+  return url;
 }
 
 // Avatar용: IMAGE fill 노드를 우선 탐색, 없으면 첫 번째 ELLIPSE/RECTANGLE 반환
