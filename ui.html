@@ -2238,6 +2238,9 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         const result = [];
 
         const headers = table.cols.map(col => col.label || '');
+        console.log(`[Sheet ${sheetName}] 컬럼 헤더:`, headers);
+        console.log(`[Sheet ${sheetName}] 행 수:`, table.rows ? table.rows.length : 0);
+
         headers.forEach((header, colIdx) => {
           if (!header) return;
 
@@ -2249,11 +2252,22 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
             }
           });
 
+          // Avatar Image 컬럼 디버깅
+          if (header.toLowerCase().includes('avatar')) {
+            console.log(`[Sheet ${sheetName}] Avatar 컬럼 발견: "${header}", values(${values.length}):`, values.slice(0, 3));
+            // cell 상세 디버깅
+            if (table.rows.length > 0) {
+              const firstCell = table.rows[0].c[colIdx];
+              console.log(`[Sheet ${sheetName}] Avatar 첫 번째 셀 raw:`, JSON.stringify(firstCell));
+            }
+          }
+
           if (values.length > 0) {
             result.push({ name: header, desc: header, values: values });
           }
         });
 
+        console.log(`[Sheet ${sheetName}] 로드 결과:`, result.map(f => `${f.name}(${f.values.length})`).join(', '));
         return result;
       } catch (error) {
         console.error(`${sheetName} 시트 로드 실패:`, error);
@@ -2294,13 +2308,16 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
       function mergeAvatarField(fields) {
         const hasAvatar = fields.some(f => f.name === 'Avatar Image');
+        console.log('[mergeAvatar] hasAvatar:', hasAvatar, 'fields:', fields.map(f => `${f.name}(${f.values ? f.values.length : 0})`).join(', '));
         if (!hasAvatar) {
           // Name 다음에 삽입
           const nameIdx = fields.findIndex(f => f.name === 'Name');
           fields.splice(nameIdx >= 0 ? nameIdx + 1 : fields.length, 0, { ...defaultAvatar });
+          console.log('[mergeAvatar] 기본 Avatar Image 추가 (values=0)');
         } else {
           // Avatar가 있더라도 isImage 속성 보장
           const avatarField = fields.find(f => f.name === 'Avatar Image');
+          console.log('[mergeAvatar] 시트 Avatar Image values:', avatarField.values ? avatarField.values.length : 0, avatarField.values ? avatarField.values.slice(0, 2) : []);
           avatarField.isImage = true;
           avatarField.imageType = 'profile';
         }
