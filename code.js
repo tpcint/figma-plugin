@@ -1047,6 +1047,8 @@ async function randomFillData(category, data) {
       name: field.name,
       desc: field.desc,
       values: field.values,
+      isImage: field.isImage || false,
+      imageType: field.imageType || null,
       currentIndex: 0  // 순서대로 적용을 위한 인덱스
     };
   }
@@ -1095,24 +1097,52 @@ async function fillMatchingLayersSequential(node, fieldMap) {
   const nodeName = node.name.toLowerCase();
   const matchingField = fieldMap[nodeName];
 
-  if (matchingField && matchingField.values && matchingField.values.length > 0) {
+  if (matchingField) {
     matched++;
+    const currentIdx = matchingField.currentIndex;
+    matchingField.currentIndex++;
 
-    // 순서대로 값 가져오기 (인덱스가 넘어가면 처음부터 다시)
-    const currentIdx = matchingField.currentIndex % matchingField.values.length;
-    const value = matchingField.values[currentIdx];
-    matchingField.currentIndex++;  // 다음 인덱스로 증가
+    if (matchingField.isImage) {
+      // 이미지 필드: Name과 같은 인덱스로 PROFILE_IMAGES 사용
+      const imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
+      const fillableNodes = findFillableNodes([node]);
+      for (const fillableNode of fillableNodes) {
+        try {
+          const imageData = await fetchImageData(imageUrl);
+          if (imageData) {
+            const image = figma.createImage(imageData);
+            const currentFills = fillableNode.fills;
+            if (currentFills === figma.mixed) continue;
+            const fillsCopy = JSON.parse(JSON.stringify(currentFills || []));
+            const hasImageFill = fillsCopy.some(f => f.type === 'IMAGE');
+            if (hasImageFill) {
+              fillableNode.fills = fillsCopy.map(f =>
+                f.type === 'IMAGE' ? { type: 'IMAGE', imageHash: image.hash, scaleMode: f.scaleMode || 'FILL', visible: f.visible !== false, opacity: f.opacity !== undefined ? f.opacity : 1 } : f
+              );
+            } else {
+              fillableNode.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
+            }
+            changed++;
+          }
+        } catch (e) {
+          console.error('Image fill error in randomFill:', e.message);
+        }
+      }
+    } else if (matchingField.values && matchingField.values.length > 0) {
+      // 텍스트 필드
+      const value = matchingField.values[currentIdx % matchingField.values.length];
 
-    // 이 노드가 텍스트이면 직접 변경
-    if (node.type === 'TEXT') {
-      const success = await changeTextInNode(node, value);
-      if (success) changed++;
-    } else {
-      // 이 노드 내부의 모든 텍스트 노드 찾아서 변경 (같은 값으로)
-      const textNodes = findAllTextNodes(node);
-      for (const textNode of textNodes) {
-        const success = await changeTextInNode(textNode, value);
+      // 이 노드가 텍스트이면 직접 변경
+      if (node.type === 'TEXT') {
+        const success = await changeTextInNode(node, value);
         if (success) changed++;
+      } else {
+        // 이 노드 내부의 모든 텍스트 노드 찾아서 변경 (같은 값으로)
+        const textNodes = findAllTextNodes(node);
+        for (const textNode of textNodes) {
+          const success = await changeTextInNode(textNode, value);
+          if (success) changed++;
+        }
       }
     }
   }
