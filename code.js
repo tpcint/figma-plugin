@@ -79,8 +79,25 @@ figma.on('selectionchange', () => {
 // 초기 선택 정보 전송
 updateSelectionInfo();
 
+// 이미지 fetch 요청에 대한 Promise resolver 맵
+var _imageResolvers = {};
+
 // UI에서 메시지 수신
 figma.ui.onmessage = async (msg) => {
+  // ui.html에서 이미지 데이터 응답 수신
+  if (msg.type === 'image-data-response') {
+    const resolver = _imageResolvers[msg.requestId];
+    if (resolver) {
+      delete _imageResolvers[msg.requestId];
+      if (msg.imageData && msg.imageData.length > 0) {
+        resolver(new Uint8Array(msg.imageData));
+      } else {
+        resolver(null);
+      }
+    }
+    return;
+  }
+
   if (msg.type === 'execute-command') {
     await executeCommand(msg.command);
   }
@@ -1509,28 +1526,19 @@ async function fetchImageData(url) {
     const requestId = 'img_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
     console.log(`[fetchImageData] 요청: ${requestId} → ${url}`);
 
-    // 응답 핸들러 등록
-    const handler = (msg) => {
-      if (msg.type === 'image-data-response' && msg.requestId === requestId) {
-        figma.ui.off('message', handler);
-        if (msg.imageData && msg.imageData.length > 0) {
-          console.log(`[fetchImageData] 성공: ${msg.imageData.length} bytes`);
-          resolve(new Uint8Array(msg.imageData));
-        } else {
-          console.log(`[fetchImageData] 실패: 데이터 없음`);
-          resolve(null);
-        }
-      }
-    };
+    // resolver 등록 (onmessage 핸들러에서 처리)
+    _imageResolvers[requestId] = resolve;
 
-    // 타임아웃 (10초)
+    // 타임아웃 (15초)
     setTimeout(() => {
-      figma.ui.off('message', handler);
-      console.log(`[fetchImageData] 타임아웃: ${requestId}`);
-      resolve(null);
-    }, 10000);
+      if (_imageResolvers[requestId]) {
+        delete _imageResolvers[requestId];
+        console.log(`[fetchImageData] 타임아웃: ${requestId}`);
+        resolve(null);
+      }
+    }, 15000);
 
-    figma.ui.on('message', handler);
+    // ui.html에 이미지 fetch 요청
     figma.ui.postMessage({ type: 'fetch-image', url: url, requestId: requestId });
   });
 }
