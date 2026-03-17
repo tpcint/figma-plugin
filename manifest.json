@@ -9,6 +9,8 @@
     "allowedDomains": [
       "https://m.search.naver.com",
       "https://docs.google.com",
+      "https://drive.google.com",
+      "https://lh3.googleusercontent.com",
       "https://i.pravatar.cc",
       "https://picsum.photos",
       "http://localhost:7777"
