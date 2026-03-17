@@ -1108,15 +1108,19 @@ async function fillMatchingLayersSequential(node, fieldMap) {
       if (matchingField.values && matchingField.values.length > 0) {
         const rawUrl = matchingField.values[currentIdx % matchingField.values.length];
         imageUrl = convertGoogleDriveUrl(rawUrl);
+        console.log(`[Avatar] 시트 URL 사용: ${imageUrl}`);
       } else {
         imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
+        console.log(`[Avatar] PROFILE_IMAGES 폴백 사용: ${imageUrl}`);
       }
       // IMAGE fill이 있는 노드를 우선 탐색, 없으면 첫 번째 ELLIPSE/RECTANGLE 사용
       const targetNode = findImageTargetNode(node);
+      console.log(`[Avatar] 노드: ${node.name}(${node.type}) → 타겟: ${targetNode ? targetNode.name+'('+targetNode.type+')' : 'null'}`);
       if (targetNode) {
         try {
           const imageData = await fetchImageData(imageUrl);
           if (imageData) {
+            console.log(`[Avatar] 이미지 fetch 성공, size: ${imageData.length}`);
             const image = figma.createImage(imageData);
             const currentFills = targetNode.fills;
             if (currentFills !== figma.mixed) {
@@ -1130,11 +1134,20 @@ async function fillMatchingLayersSequential(node, fieldMap) {
                 targetNode.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
               }
               changed++;
+              console.log(`[Avatar] 이미지 적용 완료: ${targetNode.name}`);
+            } else {
+              console.log(`[Avatar] fills가 mixed라 건너뜀`);
             }
+          } else {
+            console.error(`[Avatar] 이미지 fetch 실패 (null 반환): ${imageUrl}`);
+            figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: `Avatar 이미지 로드 실패. URL을 확인해주세요.` });
           }
         } catch (e) {
-          console.error('Image fill error in randomFill:', e.message);
+          console.error(`[Avatar] 오류: ${e.message}`, e);
+          figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: `Avatar 오류: ${e.message}` });
         }
+      } else {
+        console.log(`[Avatar] 적용할 노드를 찾지 못함: ${node.name}`);
       }
     } else if (matchingField.values && matchingField.values.length > 0) {
       // 텍스트 필드
