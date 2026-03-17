@@ -1027,7 +1027,11 @@ async function applyDummyData(value) {
 }
 
 // 순서대로 채우기 - 레이어 이름과 데이터 필드 이름이 일치하는 경우에만 적용
+// Avatar 디버그 로그 수집
+var _avatarDebugLog = [];
+
 async function randomFillData(category, data) {
+  _avatarDebugLog = [];
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
@@ -1052,6 +1056,15 @@ async function randomFillData(category, data) {
       currentIndex: 0  // 순서대로 적용을 위한 인덱스
     };
   }
+
+  // Avatar 필드 확인
+  const avatarField = fieldMap['avatar'];
+  if (avatarField) {
+    _avatarDebugLog.push(`fieldMap에 avatar 있음 (isImage=${avatarField.isImage}, values=${avatarField.values ? avatarField.values.length : 0}개)`);
+  } else {
+    _avatarDebugLog.push('fieldMap에 avatar 없음!');
+  }
+  _avatarDebugLog.push(`fieldMap 키: ${Object.keys(fieldMap).join(', ')}`);
 
   let changed = 0;
   let matched = 0;
@@ -1081,10 +1094,11 @@ async function randomFillData(category, data) {
     return;
   }
 
+  const avatarInfo = _avatarDebugLog.length > 0 ? '\n[Avatar] ' + _avatarDebugLog.join(' → ') : '';
   figma.ui.postMessage({
     type: 'data-fill-status',
     status: 'success',
-    message: `${matched}개의 일치 레이어에서 ${changed}개의 텍스트에 데이터를 순서대로 적용했습니다.`
+    message: `${matched}개의 일치 레이어에서 ${changed}개에 적용 완료.${avatarInfo}`
   });
 }
 
@@ -1103,7 +1117,7 @@ async function fillMatchingLayersSequential(node, fieldMap) {
     matchingField.currentIndex++;
 
     if (matchingField.isImage) {
-      figma.ui.postMessage({ type: 'data-fill-status', status: 'info', message: `[1/4] Avatar 매칭됨: ${node.name}(${node.type})` });
+      _avatarDebugLog.push(`매칭:${node.name}(${node.type})`);
 
       // 이미지 URL 결정
       let imageUrl = null;
@@ -1115,25 +1129,25 @@ async function fillMatchingLayersSequential(node, fieldMap) {
       if (!imageUrl) {
         imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
       }
-      figma.ui.postMessage({ type: 'data-fill-status', status: 'info', message: `[2/4] Avatar URL: ${imageUrl.substring(0, 60)}...` });
+      _avatarDebugLog.push(`URL:${imageUrl.substring(0, 50)}`);
 
       // 타겟 노드 찾기
       const targetNode = findImageTargetNode(node);
       if (!targetNode) {
-        figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: `[실패] Avatar 내부에 이미지 노드를 찾지 못함` });
+        _avatarDebugLog.push('타겟노드 없음!');
       } else {
-        figma.ui.postMessage({ type: 'data-fill-status', status: 'info', message: `[3/4] 타겟: ${targetNode.name}(${targetNode.type}), fills=${JSON.stringify(targetNode.fills).substring(0,50)}` });
+        _avatarDebugLog.push(`타겟:${targetNode.name}(${targetNode.type})`);
 
         try {
           const imageData = await fetchImageData(imageUrl);
           if (!imageData) {
-            figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: `[실패] 이미지 다운로드 실패: ${imageUrl.substring(0, 80)}` });
+            _avatarDebugLog.push(`fetch실패:${imageUrl.substring(0, 40)}`);
           } else {
-            figma.ui.postMessage({ type: 'data-fill-status', status: 'info', message: `[4/4] 이미지 로드 ${imageData.length}bytes, 적용 중...` });
+            _avatarDebugLog.push(`fetch성공:${imageData.length}bytes`);
             const image = figma.createImage(imageData);
             const currentFills = targetNode.fills;
             if (currentFills === figma.mixed) {
-              figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: `[실패] fills가 mixed 상태` });
+              _avatarDebugLog.push('fills=mixed');
             } else {
               const fillsCopy = JSON.parse(JSON.stringify(currentFills || []));
               const hasImageFill = fillsCopy.some(f => f.type === 'IMAGE');
@@ -1145,11 +1159,11 @@ async function fillMatchingLayersSequential(node, fieldMap) {
                 targetNode.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
               }
               changed++;
-              figma.ui.postMessage({ type: 'data-fill-status', status: 'success', message: `Avatar 이미지 적용 완료! (${targetNode.name})` });
+              _avatarDebugLog.push('적용완료!');
             }
           }
         } catch (e) {
-          figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: `[실패] Avatar 오류: ${e.message}` });
+          _avatarDebugLog.push(`오류:${e.message}`);
         }
       }
     } else if (matchingField.values && matchingField.values.length > 0) {
