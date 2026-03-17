@@ -2436,7 +2436,13 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
     // Avatar 이미지 데이터를 미리 가져오기 (ui.html에서 fetch → code.js로 바이너리 전달)
     async function prefetchAvatarImages(data) {
-      const avatarField = data.find(f => f.isImage && f.name === 'Avatar Image');
+      // isImage 필드 찾기 (이름 무관)
+      const avatarField = data.find(f => f.isImage === true);
+      console.log('[Avatar prefetch] avatarField:', avatarField ? avatarField.name : 'NOT FOUND',
+        'isImage:', avatarField ? avatarField.isImage : 'N/A',
+        'values:', avatarField ? avatarField.values.length : 0);
+      console.log('[Avatar prefetch] 모든 필드:', data.map(f => `${f.name}(isImage=${f.isImage})`).join(', '));
+
       if (!avatarField) return {};
 
       const imageDataMap = {};
@@ -2449,9 +2455,10 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         'https://i.pravatar.cc/300?img=41', 'https://i.pravatar.cc/300?img=47'
       ];
 
-      // 시트 URL 변환 + 폴백 URL 준비
+      // 시트 URL + 폴백 URL 준비 (최소 fallback 개수만큼은 확보)
+      const count = Math.max(urls.length, fallbackUrls.length);
       const allUrls = [];
-      for (let i = 0; i < Math.max(urls.length, fallbackUrls.length); i++) {
+      for (let i = 0; i < count; i++) {
         let fetchUrl = null;
         if (i < urls.length) {
           fetchUrl = convertImageUrlForFetch(urls[i]);
@@ -2462,34 +2469,34 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         allUrls.push({ index: i, url: fetchUrl });
       }
 
-      console.log('[Avatar] 이미지 프리페치 시작:', allUrls.length, '개');
+      console.log('[Avatar prefetch] 시작:', allUrls.length, '개, URLs:', allUrls.map(u => u.url.substring(0, 60)).join(' | '));
 
       // 병렬로 이미지 가져오기
-      await Promise.all(allUrls.map(async ({ index, url }) => {
+      const results = await Promise.allSettled(allUrls.map(async ({ index, url }) => {
         try {
           const res = await fetch(url);
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const arrayBuffer = await res.arrayBuffer();
           imageDataMap[index] = Array.from(new Uint8Array(arrayBuffer));
-          console.log(`[Avatar] 이미지 ${index} 로드 성공: ${imageDataMap[index].length} bytes`);
+          console.log(`[Avatar prefetch] ${index} OK: ${imageDataMap[index].length} bytes`);
         } catch (e) {
-          console.error(`[Avatar] 이미지 ${index} 로드 실패:`, e.message);
-          // 폴백으로 재시도
+          console.error(`[Avatar prefetch] ${index} 실패(${url.substring(0,50)}):`, e.message);
+          // 폴백 재시도
           try {
-            const fallbackUrl = fallbackUrls[index % fallbackUrls.length];
-            const res = await fetch(fallbackUrl);
-            if (res.ok) {
-              const arrayBuffer = await res.arrayBuffer();
-              imageDataMap[index] = Array.from(new Uint8Array(arrayBuffer));
-              console.log(`[Avatar] 이미지 ${index} 폴백 성공`);
+            const fbUrl = fallbackUrls[index % fallbackUrls.length];
+            const res2 = await fetch(fbUrl);
+            if (res2.ok) {
+              const ab = await res2.arrayBuffer();
+              imageDataMap[index] = Array.from(new Uint8Array(ab));
+              console.log(`[Avatar prefetch] ${index} 폴백 OK`);
             }
           } catch (e2) {
-            console.error(`[Avatar] 이미지 ${index} 폴백도 실패:`, e2.message);
+            console.error(`[Avatar prefetch] ${index} 폴백도 실패:`, e2.message);
           }
         }
       }));
 
-      console.log('[Avatar] 프리페치 완료:', Object.keys(imageDataMap).length, '개 성공');
+      console.log('[Avatar prefetch] 완료:', Object.keys(imageDataMap).length, '/', allUrls.length, '성공');
       return imageDataMap;
     }
 

@@ -1118,12 +1118,52 @@ async function fillMatchingLayersSequential(node, fieldMap) {
     if (matchingField.isImage) {
       _avatarDebugLog.push(`매칭:${node.name}(${node.type})`);
 
-      // ui.html에서 프리페치한 이미지 데이터 사용
-      const imageBytes = _avatarImageData[String(currentIdx)] || _avatarImageData[currentIdx];
-      _avatarDebugLog.push(`프리페치 idx=${currentIdx}, 데이터=${imageBytes ? imageBytes.length + 'bytes' : '없음'}`);
+      // 이미지 데이터 확보: 1) 프리페치 데이터 → 2) 시트 URL 직접 fetch → 3) 폴백 URL fetch
+      let imageData = null;
 
-      if (!imageBytes || imageBytes.length === 0) {
-        _avatarDebugLog.push('프리페치 데이터 없음, 스킵');
+      // 1단계: ui.html에서 프리페치한 데이터 확인
+      const imageBytes = _avatarImageData[String(currentIdx)] || _avatarImageData[currentIdx];
+      if (imageBytes && imageBytes.length > 0) {
+        imageData = new Uint8Array(imageBytes);
+        _avatarDebugLog.push(`프리페치OK:${imageData.length}b`);
+      } else {
+        _avatarDebugLog.push(`프리페치없음(keys:${Object.keys(_avatarImageData).join(',')})`);
+      }
+
+      // 2단계: 프리페치 없으면 시트 URL로 직접 시도
+      if (!imageData && matchingField.values && matchingField.values.length > 0) {
+        const rawUrl = matchingField.values[currentIdx % matchingField.values.length];
+        const fetchUrl = convertImageUrl(rawUrl);
+        if (fetchUrl) {
+          _avatarDebugLog.push(`직접fetch:${fetchUrl.substring(0, 50)}`);
+          try {
+            const fetched = await fetchImageData(fetchUrl);
+            if (fetched) {
+              imageData = fetched;
+              _avatarDebugLog.push(`직접OK:${imageData.length}b`);
+            }
+          } catch (e) {
+            _avatarDebugLog.push(`직접실패:${e.message}`);
+          }
+        }
+      }
+
+      // 3단계: 폴백 이미지
+      if (!imageData) {
+        const fallbackUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
+        _avatarDebugLog.push(`폴백fetch:${fallbackUrl.substring(0, 40)}`);
+        try {
+          imageData = await fetchImageData(fallbackUrl);
+          if (imageData) {
+            _avatarDebugLog.push(`폴백OK:${imageData.length}b`);
+          }
+        } catch (e) {
+          _avatarDebugLog.push(`폴백실패:${e.message}`);
+        }
+      }
+
+      if (!imageData) {
+        _avatarDebugLog.push('모든 이미지 로드 실패!');
       } else {
         // 타겟 노드 찾기
         const targetNode = findImageTargetNode(node);
@@ -1133,7 +1173,6 @@ async function fillMatchingLayersSequential(node, fieldMap) {
           _avatarDebugLog.push(`타겟:${targetNode.name}(${targetNode.type})`);
 
           try {
-            const imageData = new Uint8Array(imageBytes);
             const image = figma.createImage(imageData);
             const currentFills = targetNode.fills;
             if (currentFills === figma.mixed) {
