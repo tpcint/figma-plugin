@@ -161,7 +161,7 @@ figma.ui.onmessage = async (msg) => {
 
   // 랜덤 채우기
   if (msg.type === 'random-fill') {
-    await randomFillData(msg.category, msg.data);
+    await randomFillData(msg.category, msg.data, msg.avatarImageData || {});
   }
 
   // 이미지 채우기
@@ -1041,9 +1041,11 @@ async function applyDummyData(value) {
 // 순서대로 채우기 - 레이어 이름과 데이터 필드 이름이 일치하는 경우에만 적용
 // Avatar 디버그 로그 수집
 var _avatarDebugLog = [];
+var _avatarImageData = {};
 
-async function randomFillData(category, data) {
+async function randomFillData(category, data, avatarImageData) {
   _avatarDebugLog = [];
+  _avatarImageData = avatarImageData || {};
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
@@ -1132,24 +1134,13 @@ async function fillMatchingLayersSequential(node, fieldMap) {
     if (matchingField.isImage) {
       _avatarDebugLog.push(`매칭:${node.name}(${node.type})`);
 
-      // 이미지 URL 결정: 시트 URL → 폴백 URL
-      let imageUrl = null;
-      if (matchingField.values && matchingField.values.length > 0) {
-        const rawUrl = matchingField.values[currentIdx % matchingField.values.length];
-        imageUrl = convertImageUrl(rawUrl);
-      }
-      if (!imageUrl) {
-        imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
-      }
-      _avatarDebugLog.push(`URL:${imageUrl.substring(0, 60)}`);
+      // ui.html에서 프리페치한 이미지 데이터 사용 (프록시 경유)
+      const imageBytes = _avatarImageData[String(currentIdx)] || _avatarImageData[currentIdx];
 
-      // ui.html 라운드트립으로 이미지 다운로드
-      const imageData = await fetchImageData(imageUrl);
-
-      if (!imageData) {
-        _avatarDebugLog.push('이미지 로드 실패!');
+      if (!imageBytes || imageBytes.length === 0) {
+        _avatarDebugLog.push(`프리페치없음(idx=${currentIdx},keys=${Object.keys(_avatarImageData).length})`);
       } else {
-        _avatarDebugLog.push(`로드OK:${imageData.length}b`);
+        _avatarDebugLog.push(`프리페치OK:${imageBytes.length}b`);
         // 타겟 노드 찾기
         const targetNode = findImageTargetNode(node);
         if (!targetNode) {
@@ -1157,6 +1148,7 @@ async function fillMatchingLayersSequential(node, fieldMap) {
         } else {
           _avatarDebugLog.push(`타겟:${targetNode.name}(${targetNode.type})`);
           try {
+            const imageData = new Uint8Array(imageBytes);
             const image = figma.createImage(imageData);
             const currentFills = targetNode.fills;
             if (currentFills === figma.mixed) {
