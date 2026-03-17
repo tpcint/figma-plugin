@@ -1105,24 +1105,26 @@ async function fillMatchingLayersSequential(node, fieldMap) {
     if (matchingField.isImage) {
       // 이미지 필드: Name과 같은 인덱스로 PROFILE_IMAGES 사용
       const imageUrl = PROFILE_IMAGES[currentIdx % PROFILE_IMAGES.length];
-      const fillableNodes = findFillableNodes([node]);
-      for (const fillableNode of fillableNodes) {
+      // IMAGE fill이 있는 노드를 우선 탐색, 없으면 첫 번째 ELLIPSE/RECTANGLE 사용
+      const targetNode = findImageTargetNode(node);
+      if (targetNode) {
         try {
           const imageData = await fetchImageData(imageUrl);
           if (imageData) {
             const image = figma.createImage(imageData);
-            const currentFills = fillableNode.fills;
-            if (currentFills === figma.mixed) continue;
-            const fillsCopy = JSON.parse(JSON.stringify(currentFills || []));
-            const hasImageFill = fillsCopy.some(f => f.type === 'IMAGE');
-            if (hasImageFill) {
-              fillableNode.fills = fillsCopy.map(f =>
-                f.type === 'IMAGE' ? { type: 'IMAGE', imageHash: image.hash, scaleMode: f.scaleMode || 'FILL', visible: f.visible !== false, opacity: f.opacity !== undefined ? f.opacity : 1 } : f
-              );
-            } else {
-              fillableNode.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
+            const currentFills = targetNode.fills;
+            if (currentFills !== figma.mixed) {
+              const fillsCopy = JSON.parse(JSON.stringify(currentFills || []));
+              const hasImageFill = fillsCopy.some(f => f.type === 'IMAGE');
+              if (hasImageFill) {
+                targetNode.fills = fillsCopy.map(f =>
+                  f.type === 'IMAGE' ? { type: 'IMAGE', imageHash: image.hash, scaleMode: f.scaleMode || 'FILL', visible: f.visible !== false, opacity: f.opacity !== undefined ? f.opacity : 1 } : f
+                );
+              } else {
+                targetNode.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
+              }
+              changed++;
             }
-            changed++;
           }
         } catch (e) {
           console.error('Image fill error in randomFill:', e.message);
@@ -1361,6 +1363,42 @@ function findFillableNodes(selection) {
   console.log('=== Found nodes ===');
   fillableNodes.forEach(n => console.log(`  - ${n.name} (${n.type})`));
   return fillableNodes;
+}
+
+// Avatar용: IMAGE fill 노드를 우선 탐색, 없으면 첫 번째 ELLIPSE/RECTANGLE 반환
+function findImageTargetNode(node) {
+  // 1순위: IMAGE fill이 있는 노드 탐색 (깊이 우선)
+  function findByImageFill(n) {
+    if ('fills' in n) {
+      try {
+        const fills = n.fills;
+        if (fills !== figma.mixed && Array.isArray(fills) && fills.some(f => f.type === 'IMAGE')) {
+          return n;
+        }
+      } catch (e) {}
+    }
+    if ('children' in n && n.children) {
+      for (const child of n.children) {
+        const found = findByImageFill(child);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  // 2순위: 첫 번째 ELLIPSE 또는 RECTANGLE 탐색
+  function findFirstShape(n) {
+    if (n.type === 'ELLIPSE' || n.type === 'RECTANGLE') return n;
+    if ('children' in n && n.children) {
+      for (const child of n.children) {
+        const found = findFirstShape(child);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  return findByImageFill(node) || findFirstShape(node) || node;
 }
 
 // 프로필 이미지 URL 목록 (커스텀 이미지)
