@@ -2483,6 +2483,9 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       }
     };
 
+    // 이미지 캐시: 카테고리별로 다운로드한 이미지 저장 (버튼 재클릭 시 재사용)
+    const _avatarCache = {};
+
     document.getElementById('randomFillBtn').onclick = async () => {
       const data = dummyData[currentCategory];
       const avatarField = data.find(f => f.isImage === true);
@@ -2490,49 +2493,40 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       // Avatar 이미지가 있으면 프록시를 통해 미리 다운로드
       let avatarImageData = {};
       if (avatarField) {
-        showDataFillStatus('이미지 다운로드 중...', 'info');
-        const urls = avatarField.values || [];
-        const fallbackUrls = [
-          'https://i.pravatar.cc/300?img=1', 'https://i.pravatar.cc/300?img=5',
-          'https://i.pravatar.cc/300?img=9', 'https://i.pravatar.cc/300?img=16',
-          'https://i.pravatar.cc/300?img=20', 'https://i.pravatar.cc/300?img=25',
-          'https://i.pravatar.cc/300?img=32', 'https://i.pravatar.cc/300?img=36',
-          'https://i.pravatar.cc/300?img=41', 'https://i.pravatar.cc/300?img=47'
-        ];
+        const urls = (avatarField.values || []).filter(u => u && u.match(/^https?:\/\//));
+        const cacheKey = currentCategory + '_' + urls.slice(0, 3).join(',');
 
-        // 필요한 이미지 수 (최소 fallback 개수)
-        const count = Math.max(urls.length, fallbackUrls.length, 20);
-        const fetchJobs = [];
+        // 캐시 히트: 이전에 다운로드한 이미지 재사용
+        if (_avatarCache[cacheKey]) {
+          avatarImageData = _avatarCache[cacheKey];
+          console.log('[Avatar] 캐시 사용:', Object.keys(avatarImageData).length + '개');
+        } else {
+          showDataFillStatus('이미지 다운로드 중...', 'info');
 
-        for (let i = 0; i < count; i++) {
-          // 시트 URL이 있으면 사용, 없으면 폴백
-          let imageUrl = null;
-          if (i < urls.length && urls[i] && urls[i].match(/^https?:\/\//)) {
-            imageUrl = urls[i];
-          } else {
-            imageUrl = fallbackUrls[i % fallbackUrls.length];
+          const fetchJobs = urls.map((imageUrl, i) => ({
+            index: i,
+            proxyUrl: 'http://localhost:7777/proxy-image?url=' + encodeURIComponent(imageUrl)
+          }));
+
+          console.log('[Avatar] 프록시 경유 다운로드 시작:', fetchJobs.length, '개');
+
+          await Promise.all(fetchJobs.map(async (job) => {
+            try {
+              const res = await fetch(job.proxyUrl);
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              const buf = await res.arrayBuffer();
+              avatarImageData[job.index] = Array.from(new Uint8Array(buf));
+              console.log('[Avatar] ' + job.index + ' OK: ' + avatarImageData[job.index].length + 'b');
+            } catch (e) {
+              console.error('[Avatar] ' + job.index + ' 실패:', e.message);
+            }
+          }));
+
+          console.log('[Avatar] 다운로드 완료:', Object.keys(avatarImageData).length + '/' + fetchJobs.length);
+          if (Object.keys(avatarImageData).length > 0) {
+            _avatarCache[cacheKey] = avatarImageData;
           }
-          // 모든 URL을 로컬 프록시 경유 (리다이렉트/CORS 문제 회피)
-          const proxyUrl = 'http://localhost:7777/proxy-image?url=' + encodeURIComponent(imageUrl);
-          fetchJobs.push({ index: i, proxyUrl: proxyUrl });
         }
-
-        console.log('[Avatar] 프록시 경유 다운로드 시작:', fetchJobs.length, '개');
-
-        // 병렬 다운로드
-        await Promise.all(fetchJobs.map(async (job) => {
-          try {
-            const res = await fetch(job.proxyUrl);
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const buf = await res.arrayBuffer();
-            avatarImageData[job.index] = Array.from(new Uint8Array(buf));
-            console.log('[Avatar] ' + job.index + ' OK: ' + avatarImageData[job.index].length + 'b');
-          } catch (e) {
-            console.error('[Avatar] ' + job.index + ' 실패:', e.message);
-          }
-        }));
-
-        console.log('[Avatar] 다운로드 완료:', Object.keys(avatarImageData).length + '/' + fetchJobs.length);
       }
 
       showDataFillStatus('랜덤 채우기 중...', 'info');

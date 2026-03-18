@@ -642,18 +642,25 @@ function findTextNodeByContent(node, searchText) {
 }
 
 // 인스턴스 내 텍스트 변경을 위한 헬퍼 함수
+// 폰트 캐시: 이미 로드한 폰트는 재사용
+var _loadedFonts = new Set();
+async function loadFontCached(font) {
+  const key = font.family + '::' + font.style;
+  if (_loadedFonts.has(key)) return;
+  await figma.loadFontAsync(font);
+  _loadedFonts.add(key);
+}
+
 async function changeTextInNode(textNode, newText) {
   try {
     // Mixed fonts 처리
     if (textNode.fontName === figma.mixed) {
-      // 모든 문자의 폰트를 로드
       const len = textNode.characters.length;
       for (let i = 0; i < len; i++) {
-        const font = textNode.getRangeFontName(i, i + 1);
-        await figma.loadFontAsync(font);
+        await loadFontCached(textNode.getRangeFontName(i, i + 1));
       }
     } else {
-      await figma.loadFontAsync(textNode.fontName);
+      await loadFontCached(textNode.fontName);
     }
     textNode.characters = newText;
     return true;
@@ -670,11 +677,10 @@ async function replaceTextInNode(textNode, searchText, newText) {
     if (textNode.fontName === figma.mixed) {
       const len = textNode.characters.length;
       for (let i = 0; i < len; i++) {
-        const font = textNode.getRangeFontName(i, i + 1);
-        await figma.loadFontAsync(font);
+        await loadFontCached(textNode.getRangeFontName(i, i + 1));
       }
     } else {
-      await figma.loadFontAsync(textNode.fontName);
+      await loadFontCached(textNode.fontName);
     }
     textNode.characters = textNode.characters.replace(searchText, newText);
     return true;
@@ -1046,6 +1052,7 @@ var _avatarImageData = {};
 async function randomFillData(category, data, avatarImageData) {
   _avatarDebugLog = [];
   _avatarImageData = avatarImageData || {};
+  _loadedFonts = new Set(); // 폰트 캐시 초기화 (새 실행마다 리셋)
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
