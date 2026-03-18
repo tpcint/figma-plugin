@@ -14,6 +14,7 @@
       "https://static.likeycontents.xyz",
       "https://i.pravatar.cc",
       "https://picsum.photos",
+      "https://likey-figma-proxy.onrender.com",
       "http://localhost:7777"
     ],
     "reasoning": "맞춤법 검사 API, Google Sheets 데이터 로드(JSONP), 이미지 로드를 위해 필요합니다. localhost:7777은 이미지 CORS 폴백용(선택사항)."
