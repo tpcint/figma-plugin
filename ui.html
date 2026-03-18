@@ -2097,22 +2097,32 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       // code.js에서 이미지 fetch 요청 → ui.html에서 다운로드 후 바이너리 반환
       if (msg.type === 'fetch-image') {
         (async () => {
-          try {
-            console.log('[fetch-image] 요청:', msg.url);
-            const res = await fetch(msg.url);
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const buf = await res.arrayBuffer();
-            const bytes = Array.from(new Uint8Array(buf));
-            console.log('[fetch-image] 성공:', bytes.length, 'bytes');
-            parent.postMessage({
-              pluginMessage: { type: 'image-data-response', requestId: msg.requestId, imageData: bytes }
-            }, '*');
-          } catch (e) {
-            console.error('[fetch-image] 실패:', msg.url, e.message);
-            parent.postMessage({
-              pluginMessage: { type: 'image-data-response', requestId: msg.requestId, imageData: null }
-            }, '*');
+          const enc = encodeURIComponent(msg.url);
+          const attempts = [
+            msg.url,
+            CLOUD_PROXY + '/proxy-image?url=' + enc,
+            LOCAL_PROXY + '/proxy-image?url=' + enc,
+          ];
+          for (const url of attempts) {
+            try {
+              console.log('[fetch-image] 요청:', url);
+              const res = await fetch(url);
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              const buf = await res.arrayBuffer();
+              const bytes = Array.from(new Uint8Array(buf));
+              console.log('[fetch-image] 성공:', bytes.length, 'bytes');
+              parent.postMessage({
+                pluginMessage: { type: 'image-data-response', requestId: msg.requestId, imageData: bytes }
+              }, '*');
+              return;
+            } catch (e) {
+              console.warn('[fetch-image] 실패:', url, e.message);
+            }
           }
+          console.error('[fetch-image] 모든 시도 실패:', msg.url);
+          parent.postMessage({
+            pluginMessage: { type: 'image-data-response', requestId: msg.requestId, imageData: null }
+          }, '*');
         })();
       }
 
