@@ -237,6 +237,8 @@
       align-items: center;
       justify-content: center;
       padding: 18px 16px;
+      position: relative;
+      overflow: hidden;
     }
 
     .btn-primary {
@@ -256,6 +258,47 @@
 
     .btn-secondary:hover {
       background: #F9FAFB;
+    }
+
+    /* 버튼 로딩 상태 */
+    .btn.loading {
+      pointer-events: none;
+      opacity: 0.9;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .btn__spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    .btn-secondary .btn__spinner {
+      border-color: rgba(17,15,26,0.15);
+      border-top-color: #110F1A;
+    }
+    /* 버튼 하단 프로그레스 바 */
+    .btn__progress {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 3px;
+      background: rgba(0,0,0,0.08);
+      border-radius: 0 0 12px 12px;
+      overflow: hidden;
+    }
+    .btn__progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #818CF8, #C7D2FE);
+      transition: width 0.35s ease;
+    }
+    .btn-secondary .btn__progress-bar {
+      background: linear-gradient(90deg, #6366F1, #818CF8);
     }
 
     /* 상태 메시지 */
@@ -289,6 +332,48 @@
     .status.warning {
       background: #FFFBEB;
       color: #D97706;
+    }
+
+    /* 토스트 */
+    .toast-container {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      z-index: 9999;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      pointer-events: auto;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08);
+      transform: translateY(-20px);
+      opacity: 0;
+      animation: toastIn 0.3s ease forwards;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toast.removing {
+      animation: toastOut 0.25s ease forwards;
+    }
+    .toast.success { background: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; }
+    .toast.error   { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
+    .toast.info    { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+    .toast.warning { background: #FFFBEB; color: #D97706; border: 1px solid #FDE68A; }
+    .toast-icon { font-size: 15px; flex-shrink: 0; }
+    .toast-msg  { flex: 1; line-height: 1.4; }
+    @keyframes toastIn {
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes toastOut {
+      to { transform: translateY(-12px); opacity: 0; }
     }
 
     /* Bridge 탭 스타일 */
@@ -1244,6 +1329,9 @@
   </style>
 </head>
 <body>
+  <!-- 토스트 컨테이너 -->
+  <div class="toast-container" id="toastContainer"></div>
+
   <!-- 리사이즈 핸들 -->
   <div class="resize-handle" id="resizeHandle"></div>
 
@@ -1414,7 +1502,7 @@
         </div>
       </div>
 
-      <div class="status" id="dataFillStatus"></div>
+      <div class="status" id="dataFillStatus" style="display:none;"></div>
     </div>
   </div>
 
@@ -1964,7 +2052,29 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         }
       }
       if (msg.type === 'rename-status') showRenameStatus(msg.message, msg.status);
-      if (msg.type === 'data-fill-status') showDataFillStatus(msg.message, msg.status);
+      if (msg.type === 'data-fill-status') {
+        showDataFillStatus(msg.message, msg.status);
+        // success 또는 error 이면 로딩 해제
+        if (msg.status === 'success' || msg.status === 'error') {
+          if (_activeLoadingBtn) {
+            setBtnProgress(_activeLoadingBtn, 100);
+            setTimeout(() => {
+              setBtnLoading(_activeLoadingBtn, false);
+              _activeLoadingBtn = null;
+            }, 500);
+          }
+        }
+      }
+
+      // code.js에서 진행률 업데이트 수신
+      if (msg.type === 'fill-progress') {
+        if (_activeLoadingBtn) {
+          // 55% ~ 95% 범위에서 진행률 표시 (이미지 다운로드가 0~55%)
+          const pct = 55 + Math.round((msg.progress / 100) * 40);
+          setBtnProgress(_activeLoadingBtn, pct);
+          if (msg.text) setBtnSpinnerText(_activeLoadingBtn, msg.text);
+        }
+      }
 
       // Figma 선택 변경 시 미리보기 업데이트
       if (msg.type === 'selection-update') {
@@ -2455,31 +2565,143 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     });
 
     function showDataFillStatus(message, type) {
-      dataFillStatus.textContent = message;
-      dataFillStatus.className = 'status show ' + type;
+      showToast(message, type);
     }
 
-    document.getElementById('applyDataBtn').onclick = () => {
+    // 토스트 알림
+    function showToast(message, type, duration) {
+      const container = document.getElementById('toastContainer');
+      const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + (type || 'info');
+      toast.innerHTML = '<span class="toast-icon">' + (icons[type] || 'ℹ') + '</span><span class="toast-msg">' + message + '</span>';
+      container.appendChild(toast);
+
+      const auto = duration || (type === 'error' ? 4000 : 2500);
+      setTimeout(() => {
+        toast.classList.add('removing');
+        setTimeout(() => toast.remove(), 300);
+      }, auto);
+    }
+
+    // ── 버튼 로딩 & 프로그레스 헬퍼 ──
+    // 버튼 원래 텍스트를 저장해두는 맵
+    const _btnOrigText = new WeakMap();
+
+    function setBtnLoading(btn, loading, spinnerText) {
+      if (!btn) return;
+      if (loading) {
+        // 원래 텍스트 저장
+        if (!_btnOrigText.has(btn)) _btnOrigText.set(btn, btn.textContent.trim());
+        btn.classList.add('loading');
+        // 프로그레스 바 삽입 (없으면)
+        if (!btn.querySelector('.btn__progress')) {
+          const wrap = document.createElement('span');
+          wrap.className = 'btn__progress';
+          wrap.innerHTML = '<span class="btn__progress-bar"></span>';
+          btn.appendChild(wrap);
+        }
+        // 텍스트를 스피너 + 텍스트로 교체
+        setBtnSpinnerText(btn, spinnerText || '처리 중...');
+      } else {
+        btn.classList.remove('loading');
+        // 원래 텍스트 복원
+        const orig = _btnOrigText.get(btn);
+        if (orig) btn.textContent = orig;
+        // 프로그레스 바 제거
+        const pg = btn.querySelector('.btn__progress');
+        if (pg) pg.remove();
+      }
+    }
+
+    function setBtnProgress(btn, pct) {
+      if (!btn) return;
+      const bar = btn.querySelector('.btn__progress-bar');
+      if (bar) bar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+    }
+
+    function setBtnSpinnerText(btn, text) {
+      if (!btn) return;
+      // 현재 프로그레스 값 보존
+      const curBar = btn.querySelector('.btn__progress-bar');
+      const curWidth = curBar ? curBar.style.width : '0%';
+      btn.innerHTML = '<span class="btn__spinner"></span>' + text;
+      // 프로그레스 바 다시 붙이기
+      if (btn.classList.contains('loading')) {
+        const wrap = document.createElement('span');
+        wrap.className = 'btn__progress';
+        wrap.innerHTML = '<span class="btn__progress-bar" style="width:' + curWidth + '"></span>';
+        btn.appendChild(wrap);
+      }
+    }
+
+    // 현재 활성화된 로딩 버튼 추적
+    let _activeLoadingBtn = null;
+
+    document.getElementById('applyDataBtn').onclick = async () => {
+      const applyBtn = document.getElementById('applyDataBtn');
       if (!selectedField) {
         showDataFillStatus('필드를 선택해주세요', 'error');
         return;
       }
       const field = dummyData[currentCategory].find(f => f.name === selectedField);
-      if (field) {
-        // 이미지 타입인 경우
-        if (field.isImage) {
-          showDataFillStatus('이미지 로딩 중...', 'info');
-          parent.postMessage({
-            pluginMessage: { type: 'apply-image-fill', imageType: field.imageType }
-          }, '*');
-        } else {
-          // 텍스트 타입인 경우
-          const randomValue = field.values[Math.floor(Math.random() * field.values.length)];
-          showDataFillStatus('적용 중...', 'info');
-          parent.postMessage({
-            pluginMessage: { type: 'apply-dummy-data', value: randomValue }
-          }, '*');
+      if (!field) return;
+
+      _activeLoadingBtn = applyBtn;
+      setBtnLoading(applyBtn, true, '적용 중...');
+
+      if (field.isImage) {
+        // 엑셀시트 이미지 URL에서 랜덤 1개 선택 후 프리페치
+        const urls = (field.values || []).filter(u => u && u.match(/^https?:\/\//));
+        if (urls.length === 0) {
+          setBtnLoading(applyBtn, false);
+          showDataFillStatus('이미지 URL이 없습니다.', 'error');
+          return;
         }
+        const randomUrl = urls[Math.floor(Math.random() * urls.length)];
+        setBtnSpinnerText(applyBtn, '이미지 다운로드...');
+        setBtnProgress(applyBtn, 20);
+
+        // 프록시 fallback으로 이미지 다운로드
+        const proxyUrl = enc => `/proxy-image?url=${enc}`;
+        const enc = encodeURIComponent(randomUrl);
+        const attempts = [
+          randomUrl,
+          CLOUD_PROXY + proxyUrl(enc),
+          LOCAL_PROXY + proxyUrl(enc),
+        ];
+        let imageBytes = null;
+        for (const url of attempts) {
+          try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const buf = await res.arrayBuffer();
+            imageBytes = Array.from(new Uint8Array(buf));
+            break;
+          } catch (e) {
+            if (url === attempts[attempts.length - 1]) {
+              console.error('[ApplyData] 이미지 다운로드 실패:', e.message);
+            }
+          }
+        }
+
+        if (!imageBytes) {
+          setBtnLoading(applyBtn, false);
+          showDataFillStatus('이미지 다운로드에 실패했습니다.', 'error');
+          return;
+        }
+
+        setBtnSpinnerText(applyBtn, '레이어에 적용...');
+        setBtnProgress(applyBtn, 60);
+        parent.postMessage({
+          pluginMessage: { type: 'apply-sheet-image', imageBytes: imageBytes }
+        }, '*');
+      } else {
+        // 텍스트 타입인 경우
+        const randomValue = field.values[Math.floor(Math.random() * field.values.length)];
+        parent.postMessage({
+          pluginMessage: { type: 'apply-dummy-data', value: randomValue }
+        }, '*');
       }
     };
 
@@ -2487,8 +2709,12 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     const _avatarCache = {};
 
     document.getElementById('randomFillBtn').onclick = async () => {
+      const randomBtn = document.getElementById('randomFillBtn');
       const data = dummyData[currentCategory];
       const avatarField = data.find(f => f.isImage === true);
+
+      _activeLoadingBtn = randomBtn;
+      setBtnLoading(randomBtn, true, '준비 중...');
 
       // Avatar 이미지가 있으면 프록시를 통해 미리 다운로드
       let avatarImageData = {};
@@ -2500,15 +2726,16 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         if (_avatarCache[cacheKey]) {
           avatarImageData = _avatarCache[cacheKey];
           console.log('[Avatar] 캐시 사용:', Object.keys(avatarImageData).length + '개');
+          setBtnSpinnerText(randomBtn, '캐시 사용 ✓');
+          setBtnProgress(randomBtn, 30);
         } else {
-          showDataFillStatus('이미지 다운로드 중...', 'info');
+          setBtnSpinnerText(randomBtn, '이미지 다운로드 중...');
+          setBtnProgress(randomBtn, 5);
 
           console.log('[Avatar] 이미지 다운로드 시작:', urls.length, '개');
+          let downloadedCount = 0;
 
           await Promise.all(urls.map(async (imageUrl, i) => {
-            // 1차: 직접 fetch (CDN CORS 지원 시)
-            // 2차: 클라우드 프록시 (항상 가능, 서버 불필요)
-            // 3차: 로컬 프록시 폴백
             const proxyUrl = enc => `/proxy-image?url=${enc}`;
             const enc = encodeURIComponent(imageUrl);
             const attempts = [
@@ -2522,6 +2749,11 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const buf = await res.arrayBuffer();
                 avatarImageData[i] = Array.from(new Uint8Array(buf));
+                downloadedCount++;
+                // 다운로드 진행률: 5% ~ 50%
+                const dlPct = 5 + Math.round((downloadedCount / urls.length) * 45);
+                setBtnProgress(randomBtn, dlPct);
+                setBtnSpinnerText(randomBtn, `이미지 ${downloadedCount}/${urls.length}`);
                 console.log('[Avatar] ' + i + ' OK (' + (url.includes('localhost') ? 'proxy' : 'direct') + '): ' + avatarImageData[i].length + 'b');
                 break;
               } catch (e) {
@@ -2539,7 +2771,8 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         }
       }
 
-      showDataFillStatus('랜덤 채우기 중...', 'info');
+      setBtnSpinnerText(randomBtn, '레이어에 적용 중...');
+      setBtnProgress(randomBtn, 55);
       parent.postMessage({
         pluginMessage: {
           type: 'random-fill',

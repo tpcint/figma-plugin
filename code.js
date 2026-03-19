@@ -164,9 +164,14 @@ figma.ui.onmessage = async (msg) => {
     await randomFillData(msg.category, msg.data, msg.avatarImageData || {});
   }
 
-  // 이미지 채우기
+  // 이미지 채우기 (레거시 - pravatar)
   if (msg.type === 'apply-image-fill') {
     applyImageFill(msg.imageType);
+  }
+
+  // 엑셀시트 이미지 적용 (선택 레이어에 적용)
+  if (msg.type === 'apply-sheet-image') {
+    await applySheetImage(msg.imageBytes);
   }
 
   // 일치하는 레이어 개수 세기
@@ -1089,12 +1094,23 @@ async function randomFillData(category, data, avatarImageData) {
 
   let changed = 0;
   let matched = 0;
+  let processedNodes = 0;
+  const totalNodes = selection.length;
 
   for (const node of selection) {
     // 선택된 노드와 모든 하위 노드 탐색
     const result = await fillMatchingLayersSequential(node, fieldMap);
     changed += result.changed;
     matched += result.matched;
+    processedNodes++;
+
+    // 진행률을 UI에 전송
+    const progress = Math.round((processedNodes / totalNodes) * 100);
+    figma.ui.postMessage({
+      type: 'fill-progress',
+      progress: progress,
+      text: `${processedNodes}/${totalNodes} 레이어 처리 중...`
+    });
   }
 
   if (matched === 0) {
@@ -1106,13 +1122,16 @@ async function randomFillData(category, data, avatarImageData) {
     return;
   }
 
-  const avatarInfo = _avatarDebugLog.length > 0 ? '\n[Avatar] ' + _avatarDebugLog.join(' → ') : '';
+  // 디버그 로그는 콘솔에만 출력
+  if (_avatarDebugLog.length > 0) {
+    console.log('[Avatar Debug]', _avatarDebugLog.join(' → '));
+  }
 
   if (changed === 0) {
     figma.ui.postMessage({
       type: 'data-fill-status',
       status: 'error',
-      message: `매칭된 레이어(${matched}개)에 적용할 데이터가 없습니다.${avatarInfo}`
+      message: `매칭된 레이어(${matched}개)에 적용할 데이터가 없습니다.`
     });
     return;
   }
@@ -1120,7 +1139,7 @@ async function randomFillData(category, data, avatarImageData) {
   figma.ui.postMessage({
     type: 'data-fill-status',
     status: 'success',
-    message: `${matched}개의 일치 레이어에서 ${changed}개에 적용 완료.${avatarInfo}`
+    message: `${matched}개 레이어에 ${changed}개 적용 완료 ✓`
   });
 }
 
@@ -1330,6 +1349,67 @@ async function applyImageFill(imageType) {
     type: 'data-fill-status',
     status: 'success',
     message: `${changed}개의 레이어에 이미지를 적용했습니다.`
+  });
+}
+
+// 엑셀시트 이미지를 선택된 레이어에 적용
+async function applySheetImage(imageBytes) {
+  const selection = figma.currentPage.selection;
+
+  if (selection.length === 0) {
+    figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: '먼저 레이어를 선택해주세요.' });
+    return;
+  }
+
+  if (!imageBytes || imageBytes.length === 0) {
+    figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: '이미지 데이터가 없습니다.' });
+    return;
+  }
+
+  // 선택된 노드에서 이미지를 적용할 수 있는 노드 찾기
+  const fillableNodes = findFillableNodes(selection);
+
+  if (fillableNodes.length === 0) {
+    figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: '이미지를 적용할 수 있는 레이어가 없습니다. (Frame, Rectangle, Ellipse 등)' });
+    return;
+  }
+
+  let changed = 0;
+  try {
+    const imageData = new Uint8Array(imageBytes);
+    const image = figma.createImage(imageData);
+
+    for (const node of fillableNodes) {
+      try {
+        const currentFills = node.fills;
+        if (currentFills === figma.mixed) continue;
+
+        const fillsCopy = JSON.parse(JSON.stringify(currentFills || []));
+        const hasImageFill = fillsCopy.some(f => f.type === 'IMAGE');
+
+        if (hasImageFill) {
+          node.fills = fillsCopy.map(f =>
+            f.type === 'IMAGE'
+              ? { type: 'IMAGE', imageHash: image.hash, scaleMode: f.scaleMode || 'FILL', visible: f.visible !== false, opacity: f.opacity !== undefined ? f.opacity : 1 }
+              : f
+          );
+        } else {
+          node.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
+        }
+        changed++;
+      } catch (e) {
+        console.error('[applySheetImage] 노드 적용 실패:', node.name, e.message);
+      }
+    }
+  } catch (e) {
+    figma.ui.postMessage({ type: 'data-fill-status', status: 'error', message: '이미지 생성 실패: ' + e.message });
+    return;
+  }
+
+  figma.ui.postMessage({
+    type: 'data-fill-status',
+    status: changed > 0 ? 'success' : 'error',
+    message: changed > 0 ? `${changed}개 레이어에 이미지 적용 완료 ✓` : '이미지 적용에 실패했습니다.'
   });
 }
 
