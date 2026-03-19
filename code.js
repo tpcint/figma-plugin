@@ -616,6 +616,33 @@ function rgbToHex(r, g, b) {
   return '#' + toHex(r) + toHex(g) + toHex(b);
 }
 
+// [REFACTOR] 공통 헬퍼: 노드의 fills에 이미지 적용 (3곳 중복 제거)
+function applyImageFillToNode(node, image) {
+  const currentFills = node.fills;
+  if (currentFills === figma.mixed) return false;
+  const fillsCopy = JSON.parse(JSON.stringify(currentFills || []));
+  const hasImage = fillsCopy.some(f => f.type === 'IMAGE');
+  if (hasImage) {
+    node.fills = fillsCopy.map(f =>
+      f.type === 'IMAGE'
+        ? { type: 'IMAGE', imageHash: image.hash, scaleMode: f.scaleMode || 'FILL', visible: f.visible !== false, opacity: f.opacity !== undefined ? f.opacity : 1 }
+        : f
+    );
+  } else {
+    node.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
+  }
+  return true;
+}
+
+// [REFACTOR] 공통 헬퍼: 노드의 fills에 IMAGE 타입이 있는지 확인
+function nodeHasImageFill(node) {
+  if (!('fills' in node)) return false;
+  try {
+    const fills = node.fills;
+    return fills !== figma.mixed && Array.isArray(fills) && fills.some(f => f.type === 'IMAGE');
+  } catch (e) { return false; }
+}
+
 // 노드 내부의 모든 텍스트 노드 찾기 (재귀)
 // 컴포넌트, 인스턴스, 오토레이아웃 모두 지원
 function findAllTextNodes(node) {
@@ -854,21 +881,13 @@ function autoRenameAllLayers() {
       return 'Text';
     }
 
-    // Image Fill 체크 -> "Image"
-    if ('fills' in node && Array.isArray(node.fills)) {
-      const hasImageFill = node.fills.some(fill => fill.type === 'IMAGE');
-      if (hasImageFill) {
-        return 'Image';
-      }
-    }
+    // [REFACTOR] 공통 헬퍼 사용
+    if (nodeHasImageFill(node)) return 'Image';
 
     // FRAME/GROUP 처리
     if (node.type === 'FRAME' || node.type === 'GROUP') {
-      // Auto Layout 체크
       const isAutoLayout = 'layoutMode' in node && node.layoutMode !== 'NONE';
-
       if (isAutoLayout) {
-        // All Auto Layouts -> "Section"
         return 'Section';
       } else if (parentIsAutoLayout) {
         // FRAME/GROUP Inside Auto Layout -> "Item"
@@ -883,14 +902,7 @@ function autoRenameAllLayers() {
     if (node.type === 'RECTANGLE' || node.type === 'ELLIPSE' ||
         node.type === 'POLYGON' || node.type === 'STAR' ||
         node.type === 'LINE' || node.type === 'VECTOR') {
-      // Image Fill 체크
-      if ('fills' in node && Array.isArray(node.fills)) {
-        const hasImageFill = node.fills.some(fill => fill.type === 'IMAGE');
-        if (hasImageFill) {
-          return 'Image';
-        }
-      }
-      return 'Item';
+      return nodeHasImageFill(node) ? 'Image' : 'Item';
     }
 
     return null;
@@ -1144,7 +1156,9 @@ async function randomFillData(category, data, avatarImageData) {
 }
 
 // 레이어 이름과 데이터 필드 이름이 일치하는 경우에만 순서대로 데이터 적용
-async function fillMatchingLayersSequential(node, fieldMap) {
+// [REFACTOR] 재귀 깊이 제한 추가 (스택 오버플로우 방지)
+async function fillMatchingLayersSequential(node, fieldMap, depth) {
+  if ((depth || 0) > 50) return { changed: 0, matched: 0 };
   let changed = 0;
   let matched = 0;
 
@@ -1167,30 +1181,19 @@ async function fillMatchingLayersSequential(node, fieldMap) {
         _avatarDebugLog.push(`프리페치없음(idx=${currentIdx},keys=${Object.keys(_avatarImageData).length})`);
       } else {
         _avatarDebugLog.push(`프리페치OK:${imageBytes.length}b`);
-        // 타겟 노드 찾기
         const targetNode = findImageTargetNode(node);
         if (!targetNode) {
           _avatarDebugLog.push('타겟노드 없음!');
         } else {
           _avatarDebugLog.push(`타겟:${targetNode.name}(${targetNode.type})`);
           try {
-            const imageData = new Uint8Array(imageBytes);
-            const image = figma.createImage(imageData);
-            const currentFills = targetNode.fills;
-            if (currentFills === figma.mixed) {
-              _avatarDebugLog.push('fills=mixed');
-            } else {
-              const fillsCopy = JSON.parse(JSON.stringify(currentFills || []));
-              const hasImageFill = fillsCopy.some(f => f.type === 'IMAGE');
-              if (hasImageFill) {
-                targetNode.fills = fillsCopy.map(f =>
-                  f.type === 'IMAGE' ? { type: 'IMAGE', imageHash: image.hash, scaleMode: f.scaleMode || 'FILL', visible: f.visible !== false, opacity: f.opacity !== undefined ? f.opacity : 1 } : f
-                );
-              } else {
-                targetNode.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
-              }
+            // [REFACTOR] 공통 헬퍼 사용
+            const image = figma.createImage(new Uint8Array(imageBytes));
+            if (applyImageFillToNode(targetNode, image)) {
               changed++;
               _avatarDebugLog.push('적용완료!');
+            } else {
+              _avatarDebugLog.push('fills=mixed');
             }
           } catch (e) {
             _avatarDebugLog.push(`오류:${e.message}`);
@@ -1219,7 +1222,7 @@ async function fillMatchingLayersSequential(node, fieldMap) {
   // 자식 노드들도 재귀적으로 탐색
   if ('children' in node && node.children) {
     for (const child of node.children) {
-      const result = await fillMatchingLayersSequential(child, fieldMap);
+      const result = await fillMatchingLayersSequential(child, fieldMap, (depth || 0) + 1);
       changed += result.changed;
       matched += result.matched;
     }
@@ -1255,81 +1258,14 @@ async function applyImageFill(imageType) {
 
   let changed = 0;
 
+  // [REFACTOR] 공통 헬퍼 사용 + 불필요한 console.log 제거
   for (const node of fillableNodes) {
     try {
-      console.log(`Processing node: ${node.name} (${node.type})`);
       const imageUrl = getImageUrl(imageType, node.width, node.height);
-      console.log(`Fetching image from: ${imageUrl}`);
       const imageData = await fetchImageData(imageUrl);
-
       if (imageData) {
-        console.log(`Image data received, size: ${imageData.length}`);
         const image = figma.createImage(imageData);
-        console.log(`Image created with hash: ${image.hash}`);
-
-        // 기존 fills 복사하여 이미지만 교체
-        try {
-          // fills 읽기 가능한지 체크
-          const currentFills = node.fills;
-          console.log(`Current fills type: ${typeof currentFills}, isArray: ${Array.isArray(currentFills)}`);
-
-          if (currentFills === figma.mixed) {
-            console.log('Fills is mixed, skipping...');
-            continue;
-          }
-
-          const fillsCopy = JSON.parse(JSON.stringify(currentFills || []));
-          let newFills = [];
-
-          // 기존에 이미지 Fill이 있으면 그것만 교체
-          let hasExistingImage = false;
-          for (const fill of fillsCopy) {
-            if (fill.type === 'IMAGE') {
-              hasExistingImage = true;
-              newFills.push({
-                type: 'IMAGE',
-                imageHash: image.hash,
-                scaleMode: fill.scaleMode || 'FILL',
-                visible: fill.visible !== false,
-                opacity: fill.opacity !== undefined ? fill.opacity : 1
-              });
-            } else {
-              newFills.push(fill);
-            }
-          }
-
-          // 기존 이미지가 없으면 새로 추가
-          if (!hasExistingImage) {
-            newFills = [{
-              type: 'IMAGE',
-              imageHash: image.hash,
-              scaleMode: 'FILL'
-            }];
-          }
-
-          console.log(`Setting new fills:`, JSON.stringify(newFills));
-          node.fills = newFills;
-          console.log(`Successfully applied to: ${node.name}`);
-          changed++;
-        } catch (fillError) {
-          console.error('Cannot override fills:', fillError.message, node.name, node.type);
-
-          // 대안: 직접 fills 배열 생성 시도
-          try {
-            console.log('Trying alternative method...');
-            node.fills = [{
-              type: 'IMAGE',
-              imageHash: image.hash,
-              scaleMode: 'FILL'
-            }];
-            console.log('Alternative method succeeded!');
-            changed++;
-          } catch (altError) {
-            console.error('Alternative method also failed:', altError.message);
-          }
-        }
-      } else {
-        console.log('Failed to fetch image data');
+        if (applyImageFillToNode(node, image)) changed++;
       }
     } catch (e) {
       console.error('Image fill error:', e.message);
@@ -1376,27 +1312,12 @@ async function applySheetImage(imageBytes) {
 
   let changed = 0;
   try {
-    const imageData = new Uint8Array(imageBytes);
-    const image = figma.createImage(imageData);
+    // [REFACTOR] 공통 헬퍼 사용
+    const image = figma.createImage(new Uint8Array(imageBytes));
 
     for (const node of fillableNodes) {
       try {
-        const currentFills = node.fills;
-        if (currentFills === figma.mixed) continue;
-
-        const fillsCopy = JSON.parse(JSON.stringify(currentFills || []));
-        const hasImageFill = fillsCopy.some(f => f.type === 'IMAGE');
-
-        if (hasImageFill) {
-          node.fills = fillsCopy.map(f =>
-            f.type === 'IMAGE'
-              ? { type: 'IMAGE', imageHash: image.hash, scaleMode: f.scaleMode || 'FILL', visible: f.visible !== false, opacity: f.opacity !== undefined ? f.opacity : 1 }
-              : f
-          );
-        } else {
-          node.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
-        }
-        changed++;
+        if (applyImageFillToNode(node, image)) changed++;
       } catch (e) {
         console.error('[applySheetImage] 노드 적용 실패:', node.name, e.message);
       }
@@ -1414,82 +1335,47 @@ async function applySheetImage(imageBytes) {
 }
 
 // 이미지 Fill을 적용할 수 있는 노드 찾기
+// [REFACTOR] 과도한 console.log 제거 + nodeHasImageFill 헬퍼 사용
 function findFillableNodes(selection) {
   const fillableNodes = [];
+  const IMAGE_NAME_HINTS = ['avatar', 'profile', 'image', 'photo', 'thumbnail', 'img'];
 
-  function collectFillable(node, depth = 0) {
-    const indent = '  '.repeat(depth);
-    console.log(`${indent}[${node.type}] ${node.name}`);
+  function collectFillable(node, depth) {
+    if (depth > 20) return; // 재귀 깊이 제한
 
-    // 레이어 이름에 avatar, profile, image 등이 포함된 경우 우선 체크
-    const nameLower = node.name.toLowerCase();
-    const isLikelyImageLayer = nameLower.includes('avatar') ||
-                               nameLower.includes('profile') ||
-                               nameLower.includes('image') ||
-                               nameLower.includes('photo') ||
-                               nameLower.includes('thumbnail') ||
-                               nameLower.includes('img');
-
-    // fills 속성 체크
-    if ('fills' in node) {
-      try {
-        const fills = node.fills;
-        console.log(`${indent}  fills type: ${typeof fills}, isArray: ${Array.isArray(fills)}, length: ${Array.isArray(fills) ? fills.length : 'N/A'}`);
-
-        if (fills !== figma.mixed && Array.isArray(fills)) {
-          // fills 내용 상세 로그
-          fills.forEach((fill, idx) => {
-            console.log(`${indent}    fill[${idx}]: type=${fill.type}, visible=${fill.visible}`);
-          });
-
-          const hasImageFill = fills.some(fill => fill.type === 'IMAGE');
-
-          if (hasImageFill) {
-            console.log(`${indent}  ✓ Added (has IMAGE fill)`);
-            fillableNodes.push(node);
-            return;
-          }
-
-          // 이미지 이름을 가진 레이어이고 Shape인 경우
-          if (isLikelyImageLayer && (
-              node.type === 'RECTANGLE' ||
-              node.type === 'ELLIPSE' ||
-              node.type === 'FRAME' ||
-              node.type === 'POLYGON' ||
-              node.type === 'VECTOR')) {
-            console.log(`${indent}  ✓ Added (likely image layer by name)`);
-            fillableNodes.push(node);
-            return;
-          }
-        }
-      } catch (e) {
-        console.log(`${indent}  fills error: ${e.message}`);
-      }
-    }
-
-    // Shape 노드는 무조건 추가 (이미지 적용 가능)
-    if (node.type === 'RECTANGLE' || node.type === 'ELLIPSE') {
-      console.log(`${indent}  ✓ Added (shape: ${node.type})`);
+    // 1순위: IMAGE fill이 이미 있는 노드
+    if (nodeHasImageFill(node)) {
       fillableNodes.push(node);
-      // Shape도 children이 있을 수 있으므로 return하지 않음
+      return;
     }
 
-    // 자식 노드 탐색
-    if ('children' in node && node.children && node.children.length > 0) {
-      console.log(`${indent}  -> Exploring ${node.children.length} children`);
+    // 2순위: 이미지 관련 이름 + Shape 노드
+    const nameLower = node.name.toLowerCase();
+    const isLikelyImage = IMAGE_NAME_HINTS.some(h => nameLower.includes(h));
+
+    if (isLikelyImage && 'fills' in node &&
+        (node.type === 'RECTANGLE' || node.type === 'ELLIPSE' || node.type === 'FRAME' ||
+         node.type === 'POLYGON' || node.type === 'VECTOR')) {
+      fillableNodes.push(node);
+      return;
+    }
+
+    // 3순위: RECTANGLE / ELLIPSE 는 이미지 적용 가능
+    if (node.type === 'RECTANGLE' || node.type === 'ELLIPSE') {
+      fillableNodes.push(node);
+    }
+
+    // 자식 탐색
+    if ('children' in node && node.children) {
       for (const child of node.children) {
         collectFillable(child, depth + 1);
       }
     }
   }
 
-  console.log('=== Finding fillable nodes ===');
   for (const node of selection) {
     collectFillable(node, 0);
   }
-
-  console.log('=== Found nodes ===');
-  fillableNodes.forEach(n => console.log(`  - ${n.name} (${n.type})`));
   return fillableNodes;
 }
 
@@ -1869,9 +1755,6 @@ function checkVariables(selection) {
   return results;
 }
 
-// ===== Notion 비교 기능 =====
-
-// 노션 내용과 Figma 텍스트 비교
 // ===== Code2Design 기능 =====
 
 // 코드에서 Figma 디자인 생성
@@ -3010,7 +2893,11 @@ async function convertPenNode(penNode, parentPenNode) {
     if (penNode.lineHeight) {
       try {
         var lh = penNode.lineHeight;
-        if (lh > 0 && lh < 5) {
+        // [REFACTOR] lineHeight 허리스틱 개선: 0~1 범위만 비율, 나머지는 px
+        if (lh > 0 && lh <= 1) {
+          text.lineHeight = { value: lh * 100, unit: 'PERCENT' };
+        } else if (lh > 1 && lh <= 3) {
+          // 1.2 ~ 2.5 등 CSS line-height 비율 (배수)
           text.lineHeight = { value: lh * 100, unit: 'PERCENT' };
         } else {
           text.lineHeight = { value: lh, unit: 'PIXELS' };

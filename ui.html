@@ -282,25 +282,6 @@
       border-color: rgba(17,15,26,0.15);
       border-top-color: #110F1A;
     }
-    /* 버튼 하단 프로그레스 바 */
-    .btn__progress {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      height: 3px;
-      background: rgba(0,0,0,0.08);
-      border-radius: 0 0 12px 12px;
-      overflow: hidden;
-    }
-    .btn__progress-bar {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #818CF8, #C7D2FE);
-      transition: width 0.35s ease;
-    }
-    .btn-secondary .btn__progress-bar {
-      background: linear-gradient(90deg, #6366F1, #818CF8);
-    }
-
     /* 상태 메시지 */
     .status {
       padding: 12px 16px;
@@ -810,9 +791,7 @@
       margin: 0 auto 12px;
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    /* [REFACTOR] 중복 @keyframes spin 제거 (L268에 이미 정의됨) */
 
     /* Code2Design 탭 스타일 */
     .code-input-section {
@@ -2057,22 +2036,16 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         // success 또는 error 이면 로딩 해제
         if (msg.status === 'success' || msg.status === 'error') {
           if (_activeLoadingBtn) {
-            setBtnProgress(_activeLoadingBtn, 100);
-            setTimeout(() => {
-              setBtnLoading(_activeLoadingBtn, false);
-              _activeLoadingBtn = null;
-            }, 500);
+            setBtnLoading(_activeLoadingBtn, false);
+            _activeLoadingBtn = null;
           }
         }
       }
 
-      // code.js에서 진행률 업데이트 수신
+      // code.js에서 진행률 업데이트 수신 (스피너 텍스트만 업데이트)
       if (msg.type === 'fill-progress') {
-        if (_activeLoadingBtn) {
-          // 55% ~ 95% 범위에서 진행률 표시 (이미지 다운로드가 0~55%)
-          const pct = 55 + Math.round((msg.progress / 100) * 40);
-          setBtnProgress(_activeLoadingBtn, pct);
-          if (msg.text) setBtnSpinnerText(_activeLoadingBtn, msg.text);
+        if (_activeLoadingBtn && msg.text) {
+          setBtnSpinnerText(_activeLoadingBtn, msg.text);
         }
       }
 
@@ -2127,7 +2100,8 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
       // .pen 변환 진행 상황
       if (msg.type === 'pen-convert-progress') {
-        const pct = Math.round((msg.current / msg.total) * 100);
+        // [REFACTOR] division by zero 방지
+        const pct = (msg.total > 0) ? Math.round((msg.current / msg.total) * 100) : 0;
         const progressEl = document.getElementById('penProgress');
         const labelEl = document.getElementById('penProgressLabel');
         const barEl = document.getElementById('penProgressBar');
@@ -2273,7 +2247,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     // ===== Data Fill 탭 =====
     // Google Sheets 설정
     const SHEET_ID = '1D5471pDbLadzEelXTr7P0qwL_BK-ClOQ';
-    const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
+    // [REFACTOR] 미사용 SHEET_URL 변수 제거 (JSONP loadSheetData에서 직접 URL 생성)
     // 이미지 프록시: 클라우드(배포 후 URL 변경) → 로컬 폴백
     const CLOUD_PROXY = 'https://likey-figma-proxy.onrender.com';
     const LOCAL_PROXY = 'http://localhost:7777';
@@ -2591,48 +2565,22 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     function setBtnLoading(btn, loading, spinnerText) {
       if (!btn) return;
       if (loading) {
-        // 원래 텍스트 저장
         if (!_btnOrigText.has(btn)) _btnOrigText.set(btn, btn.textContent.trim());
         btn.classList.add('loading');
-        // 프로그레스 바 삽입 (없으면)
-        if (!btn.querySelector('.btn__progress')) {
-          const wrap = document.createElement('span');
-          wrap.className = 'btn__progress';
-          wrap.innerHTML = '<span class="btn__progress-bar"></span>';
-          btn.appendChild(wrap);
-        }
-        // 텍스트를 스피너 + 텍스트로 교체
-        setBtnSpinnerText(btn, spinnerText || '처리 중...');
+        btn.innerHTML = '<span class="btn__spinner"></span>' + (spinnerText || '처리 중...');
       } else {
         btn.classList.remove('loading');
-        // 원래 텍스트 복원
         const orig = _btnOrigText.get(btn);
         if (orig) btn.textContent = orig;
-        // 프로그레스 바 제거
-        const pg = btn.querySelector('.btn__progress');
-        if (pg) pg.remove();
       }
     }
 
-    function setBtnProgress(btn, pct) {
-      if (!btn) return;
-      const bar = btn.querySelector('.btn__progress-bar');
-      if (bar) bar.style.width = Math.min(100, Math.max(0, pct)) + '%';
-    }
+    // 프로그레스 바 제거됨 — setBtnProgress는 no-op으로 유지 (호출부 안전)
+    function setBtnProgress() {}
 
     function setBtnSpinnerText(btn, text) {
       if (!btn) return;
-      // 현재 프로그레스 값 보존
-      const curBar = btn.querySelector('.btn__progress-bar');
-      const curWidth = curBar ? curBar.style.width : '0%';
       btn.innerHTML = '<span class="btn__spinner"></span>' + text;
-      // 프로그레스 바 다시 붙이기
-      if (btn.classList.contains('loading')) {
-        const wrap = document.createElement('span');
-        wrap.className = 'btn__progress';
-        wrap.innerHTML = '<span class="btn__progress-bar" style="width:' + curWidth + '"></span>';
-        btn.appendChild(wrap);
-      }
     }
 
     // 현재 활성화된 로딩 버튼 추적
@@ -3003,7 +2951,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
               '<span class="pen-file-pick-icon">🖊️</span>' +
               '<span class="pen-file-pick-name">' + fileName + '</span>' +
               '<span style="font-size:11px;color:#9DA0B2;flex-shrink:0;">.pen</span>';
-            btn.onclick = function() { selectAndLoadPenFile(filePath); };
+            btn.onclick = function(e) { selectAndLoadPenFile(filePath, e.currentTarget); };
             picker.appendChild(btn);
           });
         })
@@ -3015,13 +2963,14 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     }
 
     // 파일 클릭 → 선택 + 로드
-    function selectAndLoadPenFile(filePath) {
+    // [REFACTOR] event.currentTarget → 명시적 element 파라미터로 변경 (컨텍스트 유실 버그 수정)
+    function selectAndLoadPenFile(filePath, clickedEl) {
       penSelectedFilePath = filePath;
 
       // 선택 강조
       var items = document.querySelectorAll('.pen-file-pick-item');
       items.forEach(function(el) { el.classList.remove('selected'); });
-      event.currentTarget.classList.add('selected');
+      if (clickedEl) clickedEl.classList.add('selected');
 
       showPenStatus('파일 읽는 중...', 'info');
       clearPenFile(true); // 이전 결과만 초기화 (목록은 유지)
@@ -3096,7 +3045,8 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       }
     }
 
-    function clearPenFile(keepList) {
+    // [REFACTOR] 미사용 파라미터 keepList 제거
+    function clearPenFile() {
       penDocumentData = null;
       penParsedFrames = [];
       document.getElementById('penFileInfo').classList.remove('show');
@@ -3528,10 +3478,15 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       checkerStatus.className = 'status show ' + type;
     }
 
+    // [REFACTOR] null-safety 가드 추가
     function updateCheckerSummary(total, errors, success) {
-      document.querySelector('#summaryTotal .summary-number').textContent = total;
-      document.querySelector('#summaryError .summary-number').textContent = errors;
-      document.querySelector('#summarySuccess .summary-number').textContent = success;
+      const el = (sel) => document.querySelector(sel);
+      const t = el('#summaryTotal .summary-number');
+      const e = el('#summaryError .summary-number');
+      const s = el('#summarySuccess .summary-number');
+      if (t) t.textContent = total;
+      if (e) e.textContent = errors;
+      if (s) s.textContent = success;
     }
 
     function renderCheckerResults() {
