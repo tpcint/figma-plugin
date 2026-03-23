@@ -204,6 +204,11 @@ figma.ui.onmessage = async (msg) => {
     await createDesignFromGeminiResponse(msg.geminiResult);
   }
 
+  // 브라우저 렌더 → Figma 디자인 생성 (HTML/CSS, Tailwind)
+  if (msg.type === 'generate-from-browser-render') {
+    await createDesignFromBrowserRender(msg.designTree);
+  }
+
   // 베리어블 생성
   if (msg.type === 'create-variables') {
     await createVariablesFromTokens(msg.collectionName, msg.tokens);
@@ -3509,6 +3514,238 @@ async function createTableVariables(collectionName, tokens) {
       status: 'error',
       message: '오류: ' + e.message
     });
+  }
+}
+
+// ===== Code2Design: 브라우저 렌더 → Figma 변환 =====
+
+// JSON 트리에서 고유 폰트 수집
+function collectFontsFromTree(data) {
+  var fonts = {};
+  function walk(node) {
+    if (!node) return;
+    if (node.fontFamily) {
+      var family = node.fontFamily;
+      var style = node.fontWeight || 'Regular';
+      fonts[family + '::' + style] = { family: family, style: style };
+    }
+    if (node.children) { for (var i = 0; i < node.children.length; i++) walk(node.children[i]); }
+  }
+  if (data.elements) { for (var i = 0; i < data.elements.length; i++) walk(data.elements[i]); }
+  return Object.values(fonts);
+}
+
+// 노드 수 카운트
+function countNodesInTree(data) {
+  var count = 0;
+  function walk(node) { count++; if (node.children) { for (var i = 0; i < node.children.length; i++) walk(node.children[i]); } }
+  if (data.elements) { for (var i = 0; i < data.elements.length; i++) walk(data.elements[i]); }
+  return count;
+}
+
+// 모서리 반경 적용 헬퍼
+function applyCornerRadiusToNode(node, radius) {
+  if (Array.isArray(radius)) {
+    node.topLeftRadius = radius[0] || 0;
+    node.topRightRadius = radius[1] || 0;
+    node.bottomRightRadius = radius[2] || 0;
+    node.bottomLeftRadius = radius[3] || 0;
+  } else if (typeof radius === 'number' && radius > 0) {
+    node.cornerRadius = radius;
+  }
+}
+
+// 브라우저 렌더 결과 → Figma 디자인 생성
+async function createDesignFromBrowserRender(data) {
+  figma.ui.postMessage({ type: 'code2design-status', status: 'info', message: 'Figma 프레임 생성 중...' });
+
+  try {
+    // 폰트 수집 + 로드
+    var fonts = collectFontsFromTree(data);
+    for (var i = 0; i < fonts.length; i++) {
+      try { await figma.loadFontAsync(fonts[i]); } catch (e) {
+        try { await figma.loadFontAsync({ family: 'Inter', style: fonts[i].style }); } catch (e2) {
+          try { await figma.loadFontAsync({ family: 'Inter', style: 'Regular' }); } catch (e3) {}
+        }
+      }
+    }
+    // Inter 기본 로드 보장
+    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+
+    // 루트 프레임
+    var mainFrame = figma.createFrame();
+    mainFrame.name = data.name || 'Code2Design';
+    mainFrame.resize(data.width || 1440, data.height || 900);
+    if (data.backgroundColor) {
+      var bgRgb = hexToFigmaRgb(data.backgroundColor);
+      if (bgRgb) mainFrame.fills = [{ type: 'SOLID', color: { r: bgRgb.r, g: bgRgb.g, b: bgRgb.b } }];
+    } else {
+      mainFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+    }
+
+    // 요소 생성
+    if (data.elements && data.elements.length) {
+      for (var i = 0; i < data.elements.length; i++) {
+        await createNodeEnhanced(data.elements[i], mainFrame, 0);
+      }
+    }
+
+    figma.currentPage.appendChild(mainFrame);
+    figma.currentPage.selection = [mainFrame];
+    figma.viewport.scrollAndZoomIntoView([mainFrame]);
+
+    var nodeCount = countNodesInTree(data);
+    figma.ui.postMessage({
+      type: 'code2design-status',
+      status: 'success',
+      message: '디자인이 생성되었습니다! (' + nodeCount + '개 요소)'
+    });
+  } catch (e) {
+    console.error('createDesignFromBrowserRender error:', e);
+    figma.ui.postMessage({ type: 'code2design-status', status: 'error', message: '디자인 생성 실패: ' + e.message });
+  }
+}
+
+// 향상된 노드 생성 (Auto Layout, strokes, shadows 지원)
+async function createNodeEnhanced(nodeData, parentNode, depth) {
+  if ((depth || 0) > 30) return;
+  var type = nodeData.type || 'frame';
+  var node;
+
+  if (type === 'text') {
+    node = figma.createText();
+    node.name = nodeData.name || 'Text';
+    var family = nodeData.fontFamily || 'Inter';
+    var style = nodeData.fontWeight || 'Regular';
+    try { await figma.loadFontAsync({ family: family, style: style }); node.fontName = { family: family, style: style }; }
+    catch (e) {
+      try { await figma.loadFontAsync({ family: 'Inter', style: style }); node.fontName = { family: 'Inter', style: style }; }
+      catch (e2) { node.fontName = { family: 'Inter', style: 'Regular' }; }
+    }
+    node.characters = nodeData.content || ' ';
+    if (nodeData.fontSize) node.fontSize = nodeData.fontSize;
+    if (nodeData.color) {
+      var cRgb = hexToFigmaRgb(nodeData.color);
+      if (cRgb) node.fills = [{ type: 'SOLID', color: { r: cRgb.r, g: cRgb.g, b: cRgb.b } }];
+    }
+    if (nodeData.letterSpacing) node.letterSpacing = { value: nodeData.letterSpacing, unit: 'PIXELS' };
+    if (nodeData.lineHeight && nodeData.lineHeight !== 'auto') node.lineHeight = { value: nodeData.lineHeight, unit: 'PIXELS' };
+    if (nodeData.textAlign) {
+      var aMap = { LEFT: 'LEFT', CENTER: 'CENTER', RIGHT: 'RIGHT', JUSTIFIED: 'JUSTIFIED' };
+      node.textAlignHorizontal = aMap[nodeData.textAlign] || 'LEFT';
+    }
+
+  } else if (type === 'ellipse') {
+    node = figma.createEllipse();
+    node.name = nodeData.name || 'Ellipse';
+    if (nodeData.fill) { var eRgb = hexToFigmaRgb(nodeData.fill); if (eRgb) node.fills = [{ type: 'SOLID', color: { r: eRgb.r, g: eRgb.g, b: eRgb.b } }]; }
+
+  } else if (type === 'rect') {
+    node = figma.createRectangle();
+    node.name = nodeData.name || 'Rectangle';
+    if (nodeData.fill) { var rRgb = hexToFigmaRgb(nodeData.fill); if (rRgb) node.fills = [{ type: 'SOLID', color: { r: rRgb.r, g: rRgb.g, b: rRgb.b } }]; }
+    if (nodeData.cornerRadius != null) applyCornerRadiusToNode(node, nodeData.cornerRadius);
+
+  } else {
+    // Frame
+    node = figma.createFrame();
+    node.name = nodeData.name || 'Frame';
+
+    // 배경색
+    if (nodeData.fill) {
+      var fRgb = hexToFigmaRgb(nodeData.fill);
+      if (fRgb) {
+        var fillEntry = { type: 'SOLID', color: { r: fRgb.r, g: fRgb.g, b: fRgb.b } };
+        if (nodeData.fillOpacity != null && nodeData.fillOpacity < 1) fillEntry.opacity = nodeData.fillOpacity;
+        node.fills = [fillEntry];
+      }
+    } else {
+      node.fills = [];
+    }
+
+    // 모서리
+    if (nodeData.cornerRadius != null) applyCornerRadiusToNode(node, nodeData.cornerRadius);
+
+    // clipsContent
+    if (nodeData.clipsContent) node.clipsContent = true;
+
+    // 불투명도
+    if (nodeData.opacity != null && nodeData.opacity < 1) node.opacity = nodeData.opacity;
+
+    // Auto Layout
+    if (nodeData.layoutMode && nodeData.layoutMode !== 'NONE') {
+      node.layoutMode = nodeData.layoutMode;
+
+      // 패딩
+      if (nodeData.padding != null) {
+        if (Array.isArray(nodeData.padding)) {
+          node.paddingTop = nodeData.padding[0] || 0;
+          node.paddingRight = nodeData.padding[1] || 0;
+          node.paddingBottom = nodeData.padding[2] || 0;
+          node.paddingLeft = nodeData.padding[3] || 0;
+        } else if (typeof nodeData.padding === 'number') {
+          node.paddingTop = node.paddingRight = node.paddingBottom = node.paddingLeft = nodeData.padding;
+        }
+      }
+
+      // 간격
+      if (nodeData.gap != null) node.itemSpacing = nodeData.gap;
+
+      // 정렬 (기존 mapJustify/mapAlignItems 재사용)
+      if (nodeData.justifyContent) node.primaryAxisAlignItems = mapJustify(nodeData.justifyContent);
+      if (nodeData.alignItems) node.counterAxisAlignItems = mapAlignItems(nodeData.alignItems);
+
+      node.primaryAxisSizingMode = 'FIXED';
+      node.counterAxisSizingMode = 'FIXED';
+    } else {
+      node.layoutMode = 'NONE';
+    }
+
+    // Strokes
+    if (nodeData.strokeColor) {
+      var sRgb = hexToFigmaRgb(nodeData.strokeColor);
+      if (sRgb) {
+        node.strokes = [{ type: 'SOLID', color: { r: sRgb.r, g: sRgb.g, b: sRgb.b } }];
+        node.strokeWeight = nodeData.strokeWeight || 1;
+        node.strokeAlign = 'INSIDE';
+      }
+    }
+
+    // Shadows
+    if (nodeData.shadows && nodeData.shadows.length > 0) {
+      node.effects = nodeData.shadows.map(function(s) {
+        var sc = { r: 0, g: 0, b: 0, a: 0.25 };
+        if (s.color) {
+          if (s.color.charAt(0) === '#') { var c = hexToFigmaRgb(s.color); if (c) sc = { r: c.r, g: c.g, b: c.b, a: c.a || 0.25 }; }
+          else if (s.color.indexOf('rgb') === 0) { var c2 = parseRgbString(s.color); if (c2) sc = c2; }
+        }
+        return { type: 'DROP_SHADOW', visible: true, color: sc, offset: { x: s.offsetX || 0, y: s.offsetY || 0 }, radius: s.blur || 0, spread: s.spread || 0 };
+      });
+    }
+
+    // 자식 노드 재귀
+    if (nodeData.children && nodeData.children.length) {
+      for (var i = 0; i < nodeData.children.length; i++) {
+        await createNodeEnhanced(nodeData.children[i], node, (depth || 0) + 1);
+      }
+    }
+  }
+
+  // 위치 + 크기
+  if (nodeData.x != null) node.x = nodeData.x;
+  if (nodeData.y != null) node.y = nodeData.y;
+  if (nodeData.width && nodeData.height) {
+    try { node.resize(typeof nodeData.width === 'number' ? nodeData.width : 100, typeof nodeData.height === 'number' ? nodeData.height : 100); } catch (e) {}
+  }
+
+  parentNode.appendChild(node);
+
+  // Auto Layout 자식 사이징
+  if (parentNode.layoutMode && parentNode.layoutMode !== 'NONE') {
+    try {
+      if (nodeData.width === 'fill') node.layoutSizingHorizontal = 'FILL';
+      if (nodeData.height === 'fill') node.layoutSizingVertical = 'FILL';
+    } catch (e) {}
   }
 }
 

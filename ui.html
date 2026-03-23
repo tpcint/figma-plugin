@@ -1506,10 +1506,8 @@
 
         <!-- Tailwind 탭 안내 (Gemini에게 직접 요청 후 붙여넣기) -->
         <div id="geminiHintSection" style="display:none; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:10px 12px; margin-bottom:12px;">
-          <div style="font-size:11px; color:#166534; font-weight:600; margin-bottom:4px;">💡 Gemini에게 아래 프롬프트로 요청하세요</div>
-          <div style="font-size:11px; color:#15803D; line-height:1.5;">아래 Tailwind 코드를 Figma JSON으로 변환해줘.<br>
-          형식: {"name":"...","width":375,"height":600,"backgroundColor":"#fff","elements":[{"type":"frame","name":"...","x":0,"y":0,"width":375,"height":100,"fill":"#6366F1","cornerRadius":12,"children":[{"type":"text","name":"...","content":"텍스트","x":16,"y":12,"width":200,"height":24,"fontSize":16,"fontWeight":"Bold","color":"#FFFFFF"}]}]}<br>
-          JSON만 응답해줘.</div>
+          <div style="font-size:11px; color:#166534; font-weight:600; margin-bottom:4px;">Tailwind CDN 자동 로드</div>
+          <div style="font-size:11px; color:#15803D; line-height:1.5;">Tailwind HTML 코드를 붙여넣으면 CDN이 자동 로드되어 클래스가 적용된 상태에서 Figma 디자인이 생성됩니다.<br>기존 Gemini JSON도 호환됩니다.</div>
         </div>
 
         <div class="code-input-section">
@@ -2745,25 +2743,250 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       document.querySelectorAll('.code-type-tab').forEach(t => t.classList.remove('active'));
       btn.classList.add('active');
       currentCodeType = codeType;
-      console.log('코드 타입 변경:', currentCodeType);
 
-      // Tailwind 탭이면 안내 섹션 표시
-      const geminiHint = document.getElementById('geminiHintSection');
+      // Tailwind 안내 섹션
+      var geminiHint = document.getElementById('geminiHintSection');
       if (geminiHint) {
         geminiHint.style.display = codeType === 'tailwind' ? 'block' : 'none';
       }
 
       // label / placeholder 업데이트
-      const label = document.getElementById('codeInputLabel');
-      const textarea = document.getElementById('codeInput');
+      var label = document.getElementById('codeInputLabel');
+      var textarea = document.getElementById('codeInput');
       if (codeType === 'tailwind') {
-        if (label) label.textContent = 'Gemini가 생성한 JSON을 붙여넣으세요';
-        if (textarea) textarea.placeholder = '// Gemini에게 요청해서 받은 JSON을 붙여넣으세요\n\n{\n  "name": "My Component",\n  "width": 375,\n  "height": 600,\n  "backgroundColor": "#FFFFFF",\n  "elements": [\n    {\n      "type": "frame",\n      "name": "Card",\n      "x": 16, "y": 16, "width": 343, "height": 200,\n      "fill": "#6366F1",\n      "cornerRadius": 12,\n      "children": [\n        {\n          "type": "text",\n          "name": "Title",\n          "content": "안녕하세요",\n          "x": 20, "y": 20, "width": 200, "height": 30,\n          "fontSize": 24, "fontWeight": "Bold", "color": "#FFFFFF"\n        }\n      ]\n    }\n  ]\n}';
+        if (label) label.textContent = 'Tailwind HTML 코드를 붙여넣으세요';
+        if (textarea) textarea.placeholder = '<div class="flex flex-col gap-4 p-6 bg-white rounded-xl shadow-lg max-w-sm">\n  <h1 class="text-2xl font-bold text-gray-900">Hello World</h1>\n  <p class="text-gray-600">Tailwind CSS 코드를 붙여넣으면\n자동으로 Figma 디자인이 생성됩니다.</p>\n  <button class="bg-indigo-500 text-white px-4 py-2 rounded-lg">\n    시작하기\n  </button>\n</div>';
+      } else if (codeType === 'html') {
+        if (label) label.textContent = 'HTML/CSS 코드를 붙여넣으세요';
+        if (textarea) textarea.placeholder = '<style>\n  .card { display:flex; flex-direction:column; gap:12px;\n    padding:24px; background:#fff; border-radius:16px;\n    box-shadow:0 4px 12px rgba(0,0,0,0.1); }\n  .title { font-size:24px; font-weight:700; }\n  .desc { font-size:16px; color:#666; }\n</style>\n<div class="card">\n  <div class="title">Hello World</div>\n  <div class="desc">HTML/CSS 코드를 붙여넣으면\n자동으로 Figma 디자인이 생성됩니다.</div>\n</div>';
       } else {
-        if (label) label.textContent = 'React/HTML 코드를 붙여넣으세요';
-        if (textarea) textarea.placeholder = '// React 컴포넌트 또는 HTML 코드를 붙여넣으세요\n// CSS 스타일도 함께 붙여넣으면 자동으로 파싱됩니다\n\nexport default function Component() {\n  return (\n    <div style={{ padding: 20 }}>\n      <h1>Hello World</h1>\n    </div>\n  );\n}';
+        if (label) label.textContent = 'React 코드를 붙여넣으세요';
+        if (textarea) textarea.placeholder = 'export default function Component() {\n  return (\n    <div style={{ padding: 20 }}>\n      <h1>Hello World</h1>\n    </div>\n  );\n}';
       }
     }
+
+    // ===== Code2Design: 브라우저 렌더링 → 스타일 추출 엔진 =====
+
+    // CSS <style> 블록과 HTML 분리
+    function extractCSSAndHTML(code) {
+      let css = '', html = code;
+      // <style>...</style> 블록 추출
+      html = code.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, function(m, c) { css += c + '\n'; return ''; });
+      // <html>/<head>/<body> 래퍼 제거
+      html = html.replace(/<\/?(?:html|head|body|!DOCTYPE)[^>]*>/gi, '').trim();
+      // <link>, <meta>, <title> 제거
+      html = html.replace(/<(?:link|meta|title)[^>]*>/gi, '');
+      return { css: css.trim(), html: html.trim() };
+    }
+
+    function buildSrcdocHTML(code) {
+      var p = extractCSSAndHTML(code);
+      return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;}</style><style>' + p.css + '</style></head><body>' + p.html + '</body></html>';
+    }
+
+    function buildSrcdocTailwind(code) {
+      var p = extractCSSAndHTML(code);
+      return '<!DOCTYPE html><html><head><meta charset="utf-8"><script src="https://cdn.tailwindcss.com"><\/script><style>' + p.css + '</style></head><body>' + p.html + '</body></html>';
+    }
+
+    // RGB/RGBA 문자열 → HEX 변환
+    function rgbStringToHex(str) {
+      if (!str) return '#000000';
+      var m = str.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+      if (!m) return '#000000';
+      return '#' + [parseInt(m[1]),parseInt(m[2]),parseInt(m[3])].map(function(c) { return c.toString(16).padStart(2,'0'); }).join('');
+    }
+
+    function parseRgbAlpha(str) {
+      var m = str && str.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/);
+      return m ? parseFloat(m[1]) : 1;
+    }
+
+    function c2dParseBorderRadius(style) {
+      var tl = parseFloat(style.borderTopLeftRadius) || 0;
+      var tr = parseFloat(style.borderTopRightRadius) || 0;
+      var br = parseFloat(style.borderBottomRightRadius) || 0;
+      var bl = parseFloat(style.borderBottomLeftRadius) || 0;
+      if (tl === tr && tr === br && br === bl) return tl > 0 ? tl : 0;
+      return [tl, tr, br, bl];
+    }
+
+    function c2dParseBorder(style) {
+      var w = parseFloat(style.borderTopWidth);
+      if (!w || w === 0) return null;
+      return { color: rgbStringToHex(style.borderTopColor), width: w };
+    }
+
+    function c2dParseBoxShadow(str) {
+      if (!str || str === 'none') return null;
+      var shadows = [];
+      var parts = str.split(/,(?![^(]*\))/);
+      for (var i = 0; i < parts.length; i++) {
+        var m = parts[i].trim().match(/([-\d.]+)px\s+([-\d.]+)px\s+([-\d.]+)px\s*(?:([-\d.]+)px)?\s*(.*)/);
+        if (m) shadows.push({ offsetX: parseFloat(m[1]), offsetY: parseFloat(m[2]), blur: parseFloat(m[3]), spread: parseFloat(m[4]) || 0, color: m[5].trim() });
+      }
+      return shadows.length > 0 ? shadows : null;
+    }
+
+    function c2dMapFontWeight(w) {
+      var n = parseInt(w);
+      if (isNaN(n)) return 'Regular';
+      if (n <= 300) return 'Light';
+      if (n <= 400) return 'Regular';
+      if (n <= 500) return 'Medium';
+      if (n <= 600) return 'Semi Bold';
+      if (n <= 700) return 'Bold';
+      if (n <= 800) return 'Extra Bold';
+      return 'Black';
+    }
+
+    function c2dMapTextAlign(v) {
+      var m = { left: 'LEFT', center: 'CENTER', right: 'RIGHT', justify: 'JUSTIFIED', start: 'LEFT', end: 'RIGHT' };
+      return m[v] || 'LEFT';
+    }
+
+    // 텍스트 전용 노드 판별
+    function isTextElement(el) {
+      if (el.children.length > 0) return false;
+      var t = el.innerText || el.textContent;
+      return t && t.trim().length > 0;
+    }
+
+    // 재귀 DOM 순회 + getComputedStyle 추출
+    function traverseDOM(el, win, depth) {
+      if ((depth || 0) > 20) return null;
+      var tag = el.tagName;
+      if (!tag) return null;
+      // 스킵할 태그
+      if (['SCRIPT','STYLE','LINK','META','BR','NOSCRIPT','TEMPLATE'].indexOf(tag) >= 0) return null;
+
+      var style = win.getComputedStyle(el);
+      var rect = el.getBoundingClientRect();
+      // 보이지 않는 요소 스킵
+      if (rect.width === 0 && rect.height === 0) return null;
+      if (style.display === 'none' || style.visibility === 'hidden') return null;
+
+      var node = {};
+
+      // 텍스트 전용 노드
+      if (isTextElement(el)) {
+        node.type = 'text';
+        node.name = tag.toLowerCase();
+        node.content = (el.innerText || el.textContent || '').trim();
+        node.width = Math.round(rect.width);
+        node.height = Math.round(rect.height);
+        node.fontSize = parseFloat(style.fontSize) || 14;
+        node.fontFamily = (style.fontFamily || 'Inter').split(',')[0].replace(/['"]/g, '').trim();
+        node.fontWeight = c2dMapFontWeight(style.fontWeight);
+        node.color = rgbStringToHex(style.color);
+        var ls = parseFloat(style.letterSpacing);
+        if (ls && !isNaN(ls)) node.letterSpacing = ls;
+        var lh = parseFloat(style.lineHeight);
+        if (lh && !isNaN(lh)) node.lineHeight = lh;
+        node.textAlign = c2dMapTextAlign(style.textAlign);
+        return node;
+      }
+
+      // 프레임 노드
+      node.type = 'frame';
+      node.name = tag.toLowerCase() + (el.id ? '#' + el.id : '') + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/)[0] : '');
+      node.width = Math.round(rect.width);
+      node.height = Math.round(rect.height);
+
+      // 배경색
+      var bg = style.backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+        node.fill = rgbStringToHex(bg);
+        var a = parseRgbAlpha(bg);
+        if (a < 1) node.fillOpacity = a;
+      }
+
+      // 모서리
+      var cr = c2dParseBorderRadius(style);
+      if (cr) node.cornerRadius = cr;
+
+      // 테두리
+      var border = c2dParseBorder(style);
+      if (border) { node.strokeColor = border.color; node.strokeWeight = border.width; }
+
+      // 그림자
+      var shadow = c2dParseBoxShadow(style.boxShadow);
+      if (shadow) node.shadows = shadow;
+
+      // overflow
+      node.clipsContent = (style.overflow === 'hidden' || style.overflowX === 'hidden' || style.overflowY === 'hidden');
+
+      // 불투명도
+      var op = parseFloat(style.opacity);
+      if (op < 1) node.opacity = op;
+
+      // Auto Layout 감지
+      var display = style.display;
+      if (display === 'flex' || display === 'inline-flex') {
+        node.layoutMode = (style.flexDirection === 'column' || style.flexDirection === 'column-reverse') ? 'VERTICAL' : 'HORIZONTAL';
+        node.justifyContent = style.justifyContent;
+        node.alignItems = style.alignItems;
+        node.gap = parseFloat(style.gap) || parseFloat(style.columnGap) || 0;
+        node.padding = [
+          parseFloat(style.paddingTop) || 0, parseFloat(style.paddingRight) || 0,
+          parseFloat(style.paddingBottom) || 0, parseFloat(style.paddingLeft) || 0
+        ];
+      } else {
+        node.layoutMode = 'NONE';
+        node.padding = [
+          parseFloat(style.paddingTop) || 0, parseFloat(style.paddingRight) || 0,
+          parseFloat(style.paddingBottom) || 0, parseFloat(style.paddingLeft) || 0
+        ];
+      }
+
+      // <img> → placeholder 프레임
+      if (tag === 'IMG') {
+        node.name = 'img' + (el.alt ? '.' + el.alt.substring(0, 20) : '');
+        node.fill = '#E5E7EB';
+        node.children = [];
+        return node;
+      }
+
+      // 자식 순회
+      node.children = [];
+      for (var i = 0; i < el.children.length; i++) {
+        var childNode = traverseDOM(el.children[i], win, (depth || 0) + 1);
+        if (childNode) {
+          // non-flex 부모는 절대 좌표 사용
+          if (node.layoutMode === 'NONE') {
+            var childRect = el.children[i].getBoundingClientRect();
+            childNode.x = Math.round(childRect.left - rect.left);
+            childNode.y = Math.round(childRect.top - rect.top);
+          }
+          node.children.push(childNode);
+        }
+      }
+
+      // 직접 텍스트 노드 처리 (혼합 콘텐츠)
+      for (var j = 0; j < el.childNodes.length; j++) {
+        var cn = el.childNodes[j];
+        if (cn.nodeType === 3 && cn.textContent.trim()) {
+          node.children.push({
+            type: 'text', name: 'text', content: cn.textContent.trim(),
+            fontSize: parseFloat(style.fontSize) || 14,
+            fontFamily: (style.fontFamily || 'Inter').split(',')[0].replace(/['"]/g, '').trim(),
+            fontWeight: c2dMapFontWeight(style.fontWeight),
+            color: rgbStringToHex(style.color)
+          });
+        }
+      }
+
+      return node;
+    }
+
+    function countNodesJSON(tree) {
+      var count = 0;
+      function walk(arr) { if (!arr) return; for (var i = 0; i < arr.length; i++) { count++; if (arr[i].children) walk(arr[i].children); } }
+      walk(tree.elements);
+      return count;
+    }
+
+    // ===== 기존 React 파싱 (하위 호환) =====
 
     // React 코드 파싱
     function parseReactCode(code) {
@@ -2840,76 +3063,112 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
     // 디자인 생성 함수 (전역)
     function generateDesign() {
-      console.log('generateDesign 호출됨');
+      var btn = document.getElementById('generateDesignBtn');
+      var codeEl = document.getElementById('codeInput');
+      var code = codeEl ? codeEl.value.trim() : '';
 
-      const btn = document.getElementById('generateDesignBtn');
-      const codeEl = document.getElementById('codeInput');
-      const code = codeEl ? codeEl.value.trim() : '';
+      if (!code) { showCode2DesignStatus('코드를 입력해주세요', 'error'); return; }
 
-      if (!code) {
-        showCode2DesignStatus('코드를 입력해주세요', 'error');
+      // ─── React: 기존 경로 유지 ───
+      if (currentCodeType === 'react') {
+        if (btn) btn.classList.add('loading');
+        showCode2DesignStatus('코드 분석 중...', 'info');
+        try {
+          var parsed = parseReactCode(code);
+          parent.postMessage({ pluginMessage: { type: 'generate-from-code', codeType: currentCodeType, parsed: parsed, rawCode: code } }, '*');
+        } catch (e) {
+          if (btn) btn.classList.remove('loading');
+          showCode2DesignStatus('코드 파싱 실패: ' + e.message, 'error');
+        }
         return;
       }
 
-      // ─── Tailwind 분기: Gemini JSON 직접 파싱 ───
-      if (currentCodeType === 'tailwind') {
-        let geminiResult;
+      // ─── Tailwind 하위 호환: JSON이면 기존 Gemini 경로 ───
+      if (currentCodeType === 'tailwind' && code.trimStart().charAt(0) === '{') {
         try {
-          // 코드 블록 마커(```json ... ```) 제거 후 JSON 파싱
-          const jsonText = code.replace(/```json\n?|\n?```/g, '').trim();
-          geminiResult = JSON.parse(jsonText);
-        } catch(e) {
-          showCode2DesignStatus('JSON 파싱 실패: ' + e.message + '\n올바른 JSON 형식을 붙여넣어주세요.', 'error');
+          var jsonText = code.replace(/```json\n?|\n?```/g, '').trim();
+          var geminiResult = JSON.parse(jsonText);
+          if (btn) btn.classList.add('loading');
+          showCode2DesignStatus('Figma 프레임 생성 중...', 'info');
+          parent.postMessage({ pluginMessage: { type: 'generate-from-tailwind', geminiResult: geminiResult } }, '*');
           return;
-        }
-
-        if (btn) btn.classList.add('loading');
-        showCode2DesignStatus('Figma 프레임 생성 중...', 'info');
-
-        // code.js에 Figma 생성 요청
-        parent.postMessage({
-          pluginMessage: { type: 'generate-from-tailwind', geminiResult: geminiResult }
-        }, '*');
-
-        return; // 기존 parseReactCode 흐름 건너뜀
+        } catch (e) { /* JSON 파싱 실패 → 브라우저 렌더 경로로 폴백 */ }
       }
-      // ──────────────────────────────────────
 
-      // 로딩 시작
-      console.log('로딩 시작');
+      // ─── HTML/CSS & Tailwind: 브라우저 렌더링 경로 ───
       if (btn) btn.classList.add('loading');
-      showCode2DesignStatus('코드 분석 중...', 'info');
+      showCode2DesignStatus('렌더링 중...', 'info');
 
       try {
-        const parsed = parseReactCode(code);
-        console.log('파싱 완료:', parsed);
+        var srcdoc = (currentCodeType === 'tailwind') ? buildSrcdocTailwind(code) : buildSrcdocHTML(code);
+        var iframe = document.getElementById('renderFrame');
 
-        // 미리보기 표시
-        const preview = document.getElementById('codePreview');
-        const previewInfo = document.getElementById('codePreviewInfo');
-        if (preview) preview.style.display = 'block';
-        if (previewInfo) {
-          previewInfo.innerHTML = `
-            <div>발견된 요소: ${parsed.elements.length}개</div>
-            <div>CSS 클래스: ${Object.keys(parsed.cssStyles).length}개</div>
-          `;
-        }
+        // 타임아웃 (10초)
+        var renderTimeout = setTimeout(function() {
+          if (btn) btn.classList.remove('loading');
+          showCode2DesignStatus('렌더링 시간 초과. 코드를 확인해주세요.', 'error');
+        }, 10000);
 
-        // Figma에 디자인 생성 요청
-        console.log('Figma에 메시지 전송');
-        parent.postMessage({
-          pluginMessage: {
-            type: 'generate-from-code',
-            codeType: currentCodeType,
-            parsed: parsed,
-            rawCode: code
-          }
-        }, '*');
+        iframe.onload = function() {
+          var delay = (currentCodeType === 'tailwind') ? 800 : 150;
+          setTimeout(function() {
+            clearTimeout(renderTimeout);
+            try {
+              showCode2DesignStatus('스타일 추출 중...', 'info');
+              var doc = iframe.contentDocument || iframe.contentWindow.document;
+              var body = doc.body;
+              var win = iframe.contentWindow;
+              var rootRect = body.getBoundingClientRect();
+              var bgColor = rgbStringToHex(win.getComputedStyle(body).backgroundColor);
+
+              var designTree = {
+                name: 'Code2Design',
+                width: Math.round(rootRect.width) || 1440,
+                height: Math.round(rootRect.height) || 900,
+                backgroundColor: (bgColor === '#000000' && win.getComputedStyle(body).backgroundColor === 'rgba(0, 0, 0, 0)') ? '#FFFFFF' : bgColor,
+                elements: []
+              };
+
+              for (var i = 0; i < body.children.length; i++) {
+                var nodeJSON = traverseDOM(body.children[i], win, 0);
+                if (nodeJSON) designTree.elements.push(nodeJSON);
+              }
+
+              if (designTree.elements.length === 0) {
+                showCode2DesignStatus('렌더링된 요소가 없습니다. HTML 코드를 확인해주세요.', 'error');
+                if (btn) btn.classList.remove('loading');
+                return;
+              }
+
+              var nodeCount = countNodesJSON(designTree);
+
+              // 프리뷰
+              var preview = document.getElementById('codePreview');
+              var previewInfo = document.getElementById('codePreviewInfo');
+              if (preview) preview.style.display = 'block';
+              if (previewInfo) previewInfo.innerHTML = '<div>추출된 요소: ' + nodeCount + '개</div>';
+
+              showCode2DesignStatus('Figma 프레임 생성 중... (' + nodeCount + '개 요소)', 'info');
+              parent.postMessage({ pluginMessage: { type: 'generate-from-browser-render', designTree: designTree } }, '*');
+            } catch (e) {
+              console.error('DOM traversal error:', e);
+              if (btn) btn.classList.remove('loading');
+              showCode2DesignStatus('스타일 추출 실패: ' + e.message, 'error');
+            }
+          }, delay);
+        };
+
+        iframe.onerror = function() {
+          clearTimeout(renderTimeout);
+          if (btn) btn.classList.remove('loading');
+          showCode2DesignStatus('렌더링 실패', 'error');
+        };
+
+        iframe.srcdoc = srcdoc;
 
       } catch (e) {
-        console.error('파싱 에러:', e);
         if (btn) btn.classList.remove('loading');
-        showCode2DesignStatus('코드 파싱 실패: ' + e.message, 'error');
+        showCode2DesignStatus('처리 실패: ' + e.message, 'error');
       }
     }
 
@@ -3619,6 +3878,9 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
 
   </script>
+
+  <!-- Code2Design: 숨겨진 렌더링 iframe (브라우저 렌더 → 스타일 추출용) -->
+  <iframe id="renderFrame" style="position:absolute;left:-9999px;top:-9999px;width:1440px;height:900px;border:none;visibility:hidden;" sandbox="allow-scripts"></iframe>
 
 </body>
 </html>
