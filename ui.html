@@ -2779,12 +2779,24 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       return { css: css.trim(), html: html.trim() };
     }
 
+    function isFullHTMLDocument(code) {
+      var t = code.trimStart().toLowerCase();
+      return t.startsWith('<!doctype') || t.startsWith('<html');
+    }
+
     function buildSrcdocHTML(code) {
+      if (isFullHTMLDocument(code)) return code;
       var p = extractCSSAndHTML(code);
       return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;}</style><style>' + p.css + '</style></head><body>' + p.html + '</body></html>';
     }
 
     function buildSrcdocTailwind(code) {
+      if (isFullHTMLDocument(code)) {
+        if (code.indexOf('cdn.tailwindcss.com') < 0) {
+          return code.replace(/<head([^>]*)>/i, '<head$1><script src="https://cdn.tailwindcss.com"><\/script>');
+        }
+        return code;
+      }
       var p = extractCSSAndHTML(code);
       return '<!DOCTYPE html><html><head><meta charset="utf-8"><script src="https://cdn.tailwindcss.com"><\/script><style>' + p.css + '</style></head><body>' + p.html + '</body></html>';
     }
@@ -3110,21 +3122,23 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         }, 10000);
 
         iframe.onload = function() {
-          var delay = (currentCodeType === 'tailwind') ? 800 : 150;
+          var delay = (currentCodeType === 'tailwind') ? 800 : 500;
           setTimeout(function() {
             clearTimeout(renderTimeout);
             try {
               showCode2DesignStatus('스타일 추출 중...', 'info');
               var doc = iframe.contentDocument || iframe.contentWindow.document;
               var body = doc.body;
+              var docEl = doc.documentElement;
               var win = iframe.contentWindow;
-              var rootRect = body.getBoundingClientRect();
               var bgColor = rgbStringToHex(win.getComputedStyle(body).backgroundColor);
+              var docWidth = Math.max(docEl.scrollWidth, body.scrollWidth, 1440);
+              var docHeight = Math.max(docEl.scrollHeight, body.scrollHeight, 100);
 
               var designTree = {
                 name: 'Code2Design',
-                width: Math.round(rootRect.width) || 1440,
-                height: Math.round(rootRect.height) || 900,
+                width: docWidth,
+                height: docHeight,
                 backgroundColor: (bgColor === '#000000' && win.getComputedStyle(body).backgroundColor === 'rgba(0, 0, 0, 0)') ? '#FFFFFF' : bgColor,
                 elements: []
               };
@@ -3880,7 +3894,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
   </script>
 
   <!-- Code2Design: 숨겨진 렌더링 iframe (브라우저 렌더 → 스타일 추출용) -->
-  <iframe id="renderFrame" style="position:absolute;left:-9999px;top:-9999px;width:1440px;height:900px;border:none;visibility:hidden;" sandbox="allow-scripts"></iframe>
+  <iframe id="renderFrame" style="position:absolute;left:-9999px;top:-9999px;width:1440px;height:900px;border:none;visibility:hidden;" sandbox="allow-scripts allow-same-origin"></iframe>
 
 </body>
 </html>
