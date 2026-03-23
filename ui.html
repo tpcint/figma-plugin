@@ -821,37 +821,6 @@
       color: #6B6B6B;
     }
 
-    .code-type-tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-
-    .code-type-tab {
-      flex: 1;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid #D7D8E5;
-      background: #fff;
-      font-size: 12px;
-      font-weight: 600;
-      color: #5A5A73;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-
-    .code-type-tab:hover {
-      border-color: #110F1A;
-    }
-
-    .code-type-tab.active {
-      background: #110F1A;
-      border-color: #110F1A;
-      color: #fff;
-    }
 
     /* .pen 업로드 섹션 스타일 */
     .pen-upload-section {
@@ -1492,36 +1461,22 @@
       <div class="card">
         <h2 class="card-title">Code → Figma Design</h2>
 
-        <div class="code-type-tabs">
-          <button class="code-type-tab active" data-codetype="react" onclick="selectCodeType(this, 'react')">
-            ⚛️ React
-          </button>
-          <button class="code-type-tab" data-codetype="html" onclick="selectCodeType(this, 'html')">
-            🌐 HTML/CSS
-          </button>
-          <button class="code-type-tab" data-codetype="tailwind" onclick="selectCodeType(this, 'tailwind')">
-            🎨 Tailwind
-          </button>
-        </div>
-
-        <!-- Tailwind 탭 안내 (Gemini에게 직접 요청 후 붙여넣기) -->
-        <div id="geminiHintSection" style="display:none; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:10px 12px; margin-bottom:12px;">
-          <div style="font-size:11px; color:#166534; font-weight:600; margin-bottom:4px;">Tailwind CDN 자동 로드</div>
-          <div style="font-size:11px; color:#15803D; line-height:1.5;">Tailwind HTML 코드를 붙여넣으면 CDN이 자동 로드되어 클래스가 적용된 상태에서 Figma 디자인이 생성됩니다.<br>기존 Gemini JSON도 호환됩니다.</div>
-        </div>
-
         <div class="code-input-section">
-          <label class="input-label" id="codeInputLabel">React/HTML 코드를 붙여넣으세요</label>
-          <textarea class="code-textarea" id="codeInput" placeholder="// React 컴포넌트 또는 HTML 코드를 붙여넣으세요
-// CSS 스타일도 함께 붙여넣으면 자동으로 파싱됩니다
+          <label class="input-label">HTML 코드를 붙여넣으세요</label>
+          <textarea class="code-textarea" id="codeInput" placeholder="<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; padding: 40px; }
+  </style>
+</head>
+<body>
+  <h1>Hello World</h1>
+</body>
+</html>
 
-export default function Component() {
-  return (
-    <div style={{ padding: 20 }}>
-      <h1>Hello World</h1>
-    </div>
-  );
-}"></textarea>
+// Claude가 생성한 HTML 코드를 그대로 붙여넣으면
+// 자동으로 Figma 디자인이 생성됩니다"></textarea>
         </div>
 
         <div class="button-group">
@@ -1788,7 +1743,6 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
   <script>
     // ===== 전역 변수 =====
-    let currentCodeType = 'react';  // Code2Design 탭용
     let currentVariableType = 'auto';  // Variables 탭용
 
     // ===== 탭 드래그 스크롤 =====
@@ -2738,32 +2692,6 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     const codePreview = document.getElementById('codePreview');
     const codePreviewInfo = document.getElementById('codePreviewInfo');
 
-    // 코드 타입 선택 함수 (인라인 onclick에서 호출)
-    function selectCodeType(btn, codeType) {
-      document.querySelectorAll('.code-type-tab').forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-      currentCodeType = codeType;
-
-      // Tailwind 안내 섹션
-      var geminiHint = document.getElementById('geminiHintSection');
-      if (geminiHint) {
-        geminiHint.style.display = codeType === 'tailwind' ? 'block' : 'none';
-      }
-
-      // label / placeholder 업데이트
-      var label = document.getElementById('codeInputLabel');
-      var textarea = document.getElementById('codeInput');
-      if (codeType === 'tailwind') {
-        if (label) label.textContent = 'Tailwind HTML 코드를 붙여넣으세요';
-        if (textarea) textarea.placeholder = '<div class="flex flex-col gap-4 p-6 bg-white rounded-xl shadow-lg max-w-sm">\n  <h1 class="text-2xl font-bold text-gray-900">Hello World</h1>\n  <p class="text-gray-600">Tailwind CSS 코드를 붙여넣으면\n자동으로 Figma 디자인이 생성됩니다.</p>\n  <button class="bg-indigo-500 text-white px-4 py-2 rounded-lg">\n    시작하기\n  </button>\n</div>';
-      } else if (codeType === 'html') {
-        if (label) label.textContent = 'HTML/CSS 코드를 붙여넣으세요';
-        if (textarea) textarea.placeholder = '<style>\n  .card { display:flex; flex-direction:column; gap:12px;\n    padding:24px; background:#fff; border-radius:16px;\n    box-shadow:0 4px 12px rgba(0,0,0,0.1); }\n  .title { font-size:24px; font-weight:700; }\n  .desc { font-size:16px; color:#666; }\n</style>\n<div class="card">\n  <div class="title">Hello World</div>\n  <div class="desc">HTML/CSS 코드를 붙여넣으면\n자동으로 Figma 디자인이 생성됩니다.</div>\n</div>';
-      } else {
-        if (label) label.textContent = 'React 코드를 붙여넣으세요';
-        if (textarea) textarea.placeholder = 'export default function Component() {\n  return (\n    <div style={{ padding: 20 }}>\n      <h1>Hello World</h1>\n    </div>\n  );\n}';
-      }
-    }
 
     // ===== Code2Design: 브라우저 렌더링 → 스타일 추출 엔진 =====
 
@@ -2873,10 +2801,12 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       if (['SCRIPT','STYLE','LINK','META','BR','NOSCRIPT','TEMPLATE'].indexOf(tag) >= 0) return null;
 
       var style = win.getComputedStyle(el);
-      var rect = el.getBoundingClientRect();
-      // 보이지 않는 요소 스킵
-      if (rect.width === 0 && rect.height === 0) return null;
       if (style.display === 'none' || style.visibility === 'hidden') return null;
+      var rect = el.getBoundingClientRect();
+      // offsetWidth/offsetHeight 폴백 (애니메이션 중인 요소 등)
+      var w = rect.width || el.offsetWidth || 0;
+      var h = rect.height || el.offsetHeight || 0;
+      if (w === 0 && h === 0) return null;
 
       var node = {};
 
@@ -2885,8 +2815,8 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
         node.type = 'text';
         node.name = tag.toLowerCase();
         node.content = (el.innerText || el.textContent || '').trim();
-        node.width = Math.round(rect.width);
-        node.height = Math.round(rect.height);
+        node.width = Math.round(w);
+        node.height = Math.round(h);
         node.fontSize = parseFloat(style.fontSize) || 14;
         node.fontFamily = (style.fontFamily || 'Inter').split(',')[0].replace(/['"]/g, '').trim();
         node.fontWeight = c2dMapFontWeight(style.fontWeight);
@@ -2902,8 +2832,8 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       // 프레임 노드
       node.type = 'frame';
       node.name = tag.toLowerCase() + (el.id ? '#' + el.id : '') + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/)[0] : '');
-      node.width = Math.round(rect.width);
-      node.height = Math.round(rect.height);
+      node.width = Math.round(w);
+      node.height = Math.round(h);
 
       // 배경색
       var bg = style.backgroundColor;
@@ -3073,6 +3003,19 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       return styles;
     }
 
+    // 코드 타입 자동 감지
+    function detectCodeType(code) {
+      var t = code.trim();
+      // JSON 오브젝트 → Gemini 경로
+      if (t.charAt(0) === '{') {
+        try { JSON.parse(t.replace(/```json\n?|\n?```/g, '').trim()); return 'json'; } catch (e) {}
+      }
+      // Tailwind CDN이 포함된 HTML
+      if (t.indexOf('cdn.tailwindcss.com') >= 0 || t.indexOf('class="') >= 0 && !t.indexOf('<style') >= 0) return 'tailwind';
+      // 기본: HTML 브라우저 렌더 경로
+      return 'html';
+    }
+
     // 디자인 생성 함수 (전역)
     function generateDesign() {
       var btn = document.getElementById('generateDesignBtn');
@@ -3081,22 +3024,10 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
       if (!code) { showCode2DesignStatus('코드를 입력해주세요', 'error'); return; }
 
-      // ─── React: 기존 경로 유지 ───
-      if (currentCodeType === 'react') {
-        if (btn) btn.classList.add('loading');
-        showCode2DesignStatus('코드 분석 중...', 'info');
-        try {
-          var parsed = parseReactCode(code);
-          parent.postMessage({ pluginMessage: { type: 'generate-from-code', codeType: currentCodeType, parsed: parsed, rawCode: code } }, '*');
-        } catch (e) {
-          if (btn) btn.classList.remove('loading');
-          showCode2DesignStatus('코드 파싱 실패: ' + e.message, 'error');
-        }
-        return;
-      }
+      var codeType = detectCodeType(code);
 
-      // ─── Tailwind 하위 호환: JSON이면 기존 Gemini 경로 ───
-      if (currentCodeType === 'tailwind' && code.trimStart().charAt(0) === '{') {
+      // ─── JSON: 기존 Gemini 경로 ───
+      if (codeType === 'json') {
         try {
           var jsonText = code.replace(/```json\n?|\n?```/g, '').trim();
           var geminiResult = JSON.parse(jsonText);
@@ -3104,7 +3035,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
           showCode2DesignStatus('Figma 프레임 생성 중...', 'info');
           parent.postMessage({ pluginMessage: { type: 'generate-from-tailwind', geminiResult: geminiResult } }, '*');
           return;
-        } catch (e) { /* JSON 파싱 실패 → 브라우저 렌더 경로로 폴백 */ }
+        } catch (e) { /* 폴백 → HTML 경로 */ }
       }
 
       // ─── HTML/CSS & Tailwind: 브라우저 렌더링 경로 ───
@@ -3112,17 +3043,17 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       showCode2DesignStatus('렌더링 중...', 'info');
 
       try {
-        var srcdoc = (currentCodeType === 'tailwind') ? buildSrcdocTailwind(code) : buildSrcdocHTML(code);
+        var srcdoc = (codeType === 'tailwind') ? buildSrcdocTailwind(code) : buildSrcdocHTML(code);
         var iframe = document.getElementById('renderFrame');
 
-        // 타임아웃 (10초)
+        // 타임아웃 (15초)
         var renderTimeout = setTimeout(function() {
           if (btn) btn.classList.remove('loading');
           showCode2DesignStatus('렌더링 시간 초과. 코드를 확인해주세요.', 'error');
-        }, 10000);
+        }, 15000);
 
         iframe.onload = function() {
-          var delay = (currentCodeType === 'tailwind') ? 800 : 500;
+          var delay = (codeType === 'tailwind') ? 800 : 500;
           setTimeout(function() {
             clearTimeout(renderTimeout);
             try {
@@ -3145,7 +3076,13 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
 
               for (var i = 0; i < body.children.length; i++) {
                 var nodeJSON = traverseDOM(body.children[i], win, 0);
-                if (nodeJSON) designTree.elements.push(nodeJSON);
+                if (nodeJSON) {
+                  // 루트 요소의 절대 위치 설정 (body의 padding/flex 오프셋 반영)
+                  var childRect = body.children[i].getBoundingClientRect();
+                  nodeJSON.x = Math.round(childRect.left);
+                  nodeJSON.y = Math.round(childRect.top);
+                  designTree.elements.push(nodeJSON);
+                }
               }
 
               if (designTree.elements.length === 0) {
