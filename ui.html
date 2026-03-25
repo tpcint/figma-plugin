@@ -2899,6 +2899,14 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
             var childRect = el.children[i].getBoundingClientRect();
             childNode.x = Math.round(childRect.left - rect.left);
             childNode.y = Math.round(childRect.top - rect.top);
+          } else {
+            // flex 부모: flex-grow 감지 → FILL 사이징 마킹
+            var childStyle = win.getComputedStyle(el.children[i]);
+            var flexGrow = parseFloat(childStyle.flexGrow) || 0;
+            if (flexGrow > 0) {
+              if (node.layoutMode === 'HORIZONTAL') childNode.widthFill = true;
+              else if (node.layoutMode === 'VERTICAL') childNode.heightFill = true;
+            }
           }
           node.children.push(childNode);
         }

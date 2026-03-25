@@ -3623,6 +3623,7 @@ async function createNodeEnhanced(nodeData, parentNode, depth) {
       catch (e2) { node.fontName = { family: 'Inter', style: 'Regular' }; }
     }
     node.characters = nodeData.content || ' ';
+    node.textAutoResize = 'HEIGHT';
     if (nodeData.fontSize) node.fontSize = nodeData.fontSize;
     if (nodeData.color) {
       var cRgb = hexToFigmaRgb(nodeData.color);
@@ -3719,14 +3720,18 @@ async function createNodeEnhanced(nodeData, parentNode, depth) {
           if (s.color.charAt(0) === '#') { var c = hexToFigmaRgb(s.color); if (c) sc = { r: c.r, g: c.g, b: c.b, a: c.a || 0.25 }; }
           else if (s.color.indexOf('rgb') === 0) { var c2 = parseRgbString(s.color); if (c2) sc = c2; }
         }
-        return { type: 'DROP_SHADOW', visible: true, color: sc, offset: { x: s.offsetX || 0, y: s.offsetY || 0 }, radius: s.blur || 0, spread: s.spread || 0 };
+        return { type: 'DROP_SHADOW', visible: true, blendMode: 'NORMAL', color: sc, offset: { x: s.offsetX || 0, y: s.offsetY || 0 }, radius: s.blur || 0, spread: s.spread || 0 };
       });
     }
 
     // 자식 노드 재귀
     if (nodeData.children && nodeData.children.length) {
       for (var i = 0; i < nodeData.children.length; i++) {
-        await createNodeEnhanced(nodeData.children[i], node, (depth || 0) + 1);
+        try {
+          await createNodeEnhanced(nodeData.children[i], node, (depth || 0) + 1);
+        } catch (e) {
+          console.error('child creation error at index ' + i + ':', e);
+        }
       }
     }
   }
@@ -3743,8 +3748,8 @@ async function createNodeEnhanced(nodeData, parentNode, depth) {
   // Auto Layout 자식 사이징
   if (parentNode.layoutMode && parentNode.layoutMode !== 'NONE') {
     try {
-      if (nodeData.width === 'fill') node.layoutSizingHorizontal = 'FILL';
-      if (nodeData.height === 'fill') node.layoutSizingVertical = 'FILL';
+      if (nodeData.width === 'fill' || nodeData.widthFill) node.layoutSizingHorizontal = 'FILL';
+      if (nodeData.height === 'fill' || nodeData.heightFill) node.layoutSizingVertical = 'FILL';
     } catch (e) {}
   }
 }
