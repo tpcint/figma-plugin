@@ -2762,7 +2762,9 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       var shadows = [];
       var parts = str.split(/,(?![^(]*\))/);
       for (var i = 0; i < parts.length; i++) {
-        var m = parts[i].trim().match(/([-\d.]+)px\s+([-\d.]+)px\s+([-\d.]+)px\s*(?:([-\d.]+)px)?\s*(.*)/);
+        var part = parts[i].trim();
+        if (part.indexOf('inset') >= 0) continue;
+        var m = part.match(/([-\d.]+)px\s+([-\d.]+)px\s+([-\d.]+)px\s*(?:([-\d.]+)px)?\s*(.*)/);
         if (m) shadows.push({ offsetX: parseFloat(m[1]), offsetY: parseFloat(m[2]), blur: parseFloat(m[3]), spread: parseFloat(m[4]) || 0, color: m[5].trim() });
       }
       return shadows.length > 0 ? shadows : null;
@@ -2798,7 +2800,7 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
       var tag = el.tagName;
       if (!tag) return null;
       // 스킵할 태그
-      if (['SCRIPT','STYLE','LINK','META','BR','NOSCRIPT','TEMPLATE'].indexOf(tag) >= 0) return null;
+      if (['SCRIPT','STYLE','LINK','META','BR','NOSCRIPT','TEMPLATE','SVG'].indexOf(tag) >= 0) return null;
 
       var style = win.getComputedStyle(el);
       if (style.display === 'none' || style.visibility === 'hidden') return null;
