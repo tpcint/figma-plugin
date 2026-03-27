@@ -2713,9 +2713,13 @@ Blue 80	#52A5FF	#8CC6FF"></textarea>
     }
 
     function buildSrcdocHTML(code) {
-      if (isFullHTMLDocument(code)) return code;
+      var resetCSS = '<style>*,*::before,*::after{animation-duration:0.001ms!important;animation-delay:0ms!important;transition-duration:0.001ms!important;}</style>';
+      if (isFullHTMLDocument(code)) {
+        if (code.indexOf('</head>') >= 0) return code.replace('</head>', resetCSS + '</head>');
+        return code.replace(/<body/i, resetCSS + '<body') || code;
+      }
       var p = extractCSSAndHTML(code);
-      return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;}</style><style>' + p.css + '</style></head><body>' + p.html + '</body></html>';
+      return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;}</style>' + resetCSS + '<style>' + p.css + '</style></head><body>' + p.html + '</body></html>';
     }
 
     function buildSrcdocTailwind(code) {
